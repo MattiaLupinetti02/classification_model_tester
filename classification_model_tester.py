@@ -127,7 +127,8 @@ class ModelTester:
                     for label, index in self.label_mapping.items():    
                         self.performances["specific"][f'{m}'.split('(')[0]][f'{name}_{label}'] = None
                     self.performances["overall"][f'{m}'.split('(')[0]][f'{name}'] = None
-        
+
+      
     def get_soft_voting_ready_models(self,models):
         """
         Filtra e restituisce i modelli compatibili con soft voting / stacking.
@@ -513,11 +514,14 @@ class ModelTester:
 
     def make_dataframe_performances(self,data):
         # Creiamo una lista vuota per raccogliere tutte le informazioni da visualizzare
+
+        # aggiungere un if di controllo iniziale per evitare che si inizi a creare un dataframe di valori None
         exp_types = []
         metrics = []
         hyperparams = []
         performances = []
         model_names = []
+        
         for exp_type, model_metric_hyperpar_perf in data.items():
             if model_metric_hyperpar_perf is not None:
                 for model, metric_hyperpar_perf in model_metric_hyperpar_perf.items():
@@ -563,7 +567,6 @@ class ModelTester:
         # Iteriamo sui modelli e creiamo un grafico per ogni modello
         for i, model in enumerate(unique_models):
             ax = axes[i]
-            print(ax)
             # Filtriamo i dati per il modello corrente
             model_data = data_to_plot[data_to_plot["Model"] == model]
             
@@ -618,6 +621,16 @@ class ModelTester:
     ):
         scorers = {}
 
+        """
+        if self.modelList is not None:
+            for m in self.modelList:
+                self.performances["specific"][f'{m}'.split('(')[0]] = {}
+                self.performances["overall"][f'{m}'.split('(')[0]] = {}
+                for name, metric in self.metrics.items():
+                    for label, index in self.label_mapping.items():    
+                        self.performances["specific"][f'{m}'.split('(')[0]][f'{name}_{label}'] = None
+                    self.performances["overall"][f'{m}'.split('(')[0]][f'{name}'] = None
+        """
         # Decidi il dataset
         if resampled_data_y is not None and resampled_data_x is not None and resampler is not None:
             y = resampled_data_y
@@ -643,15 +656,28 @@ class ModelTester:
             print(f"Testing model: {model} with {searcher_class.__name__}")
 
             # Inizializza il "searcher" scelto
-            searcher = searcher_class(
-                estimator=model,
-                param_grid=params if searcher_class != RandomizedSearchCV else None,  
-                scoring= 'f1' if searcher_class == HalvingGridSearchCV else scorers,
-                refit=list(scorers.keys())[0],
-                cv=cv_strategy,
-                verbose=1,
-                **searcher_kwargs
-            )
+            if searcher_class == RandomizedSearchCV:
+                searcher = searcher_class(
+                    estimator=model,
+                    param_distributions=params,   # ✅ corretto per RandomizedSearchCV
+                    scoring=scorers,
+                    refit=list(scorers.keys())[0],
+                    cv=cv_strategy,
+                    verbose=1,
+                    **searcher_kwargs
+                )
+
+            else:
+                searcher = searcher_class(
+                    estimator=model,
+                    param_grid=params,            # ✅ corretto per GridSearchCV / HalvingGridSearchCV
+                    scoring='f1' if searcher_class == HalvingGridSearchCV else scorers,
+                    refit=list(scorers.keys())[0],
+                    cv=cv_strategy,
+                    verbose=1,
+                    **searcher_kwargs
+                )
+
 
             # Se è RandomizedSearchCV, serve param_distributions
             if searcher_class == RandomizedSearchCV:
@@ -686,31 +712,31 @@ class ModelTester:
                 else:
                     self.performances['overall'][f'{model}'.split('(')[0]] = perf
 
-    def best_param_calculator_by_label(self,cv = 10):
+    def best_param_calculator_by_label(self,cv = 10,searcher_class=GridSearchCV):
         """
         for k in self.label_mapping.keys():
             self.best_param_calculator(cv,"macro",k)
         """
-        self.best_param_calculator(cv,"macro",True)
-    def best_param_calculator_ensamble_by_label(self,cv=10):
+        self.best_param_calculator(cv,"macro",True,searcher_class=searcher_class)
+    def best_param_calculator_ensamble_by_label(self,cv=10,searcher_class=GridSearchCV):
         if self.ensambleModelList is None:
             return "No Ensamble Models"
         copy_models = self.modelList.copy()
         self.modelList = {ens:None for ens in self.ensambleModelList}
         for k in self.modelList.keys():
             self.modelList[k] = self.ensamble_hyperpar
-        self.best_param_calculator(cv,'macro',True)
+        self.best_param_calculator(cv,'macro',True,searcher_class=searcher_class)
         self.modelList = copy_models
-    def best_param_calculator_ensamble(self,cv=10):
+    def best_param_calculator_ensamble(self,cv=10,searcher_class=GridSearchCV):
         if self.ensambleModelList is None:
             return "No Ensamble Models"
         copy_models = self.modelList.copy()
         self.modelList = {ens:None for ens in self.ensambleModelList}
         for k in self.modelList.keys():
             self.modelList[k] = self.ensamble_hyperpar
-        self.best_param_calculator(cv,'macro')
+        self.best_param_calculator(cv,'macro',searcher_class=searcher_class)
         self.modelList = copy_models
-    def best_param_calculator_ensamble_from_augmented_data(self,cv=10):
+    def best_param_calculator_ensamble_from_augmented_data(self,cv=10,searcher_class=GridSearchCV):
         if self.resampled_data is None:
             return "No augmented data"
         if self.ensambleModelList is None:
@@ -723,9 +749,9 @@ class ModelTester:
                 print(f"for augmented data with {m}")
                 data_y = data[self.target]
                 data_x =  data.drop(self.target,axis=1)
-                self.best_param_calculator(cv,"macro",resampled_data_x=data_x, resampled_data_y=data_y,resampler=m)
+                self.best_param_calculator(cv,"macro",resampled_data_x=data_x,searcher_class=searcher_class, resampled_data_y=data_y,resampler=m)
         self.modelList = copy_models
-    def best_param_calculator_ensamble_from_augmented_data_by_label(self,cv=10):
+    def best_param_calculator_ensamble_from_augmented_data_by_label(self,cv=10, searcher_class=GridSearchCV):
         if self.resampled_data is None:
             return "No augmented data"
         if self.ensambleModelList is None:
@@ -741,17 +767,17 @@ class ModelTester:
                 data_y = data[self.target]
                 data_X =  data.drop(self.target,axis=1)
                 print(data_X)
-                self.best_param_calculator(cv,"macro",by_target_label=True,resampled_data_x=data_X, resampled_data_y=data_y,resampler=m)
+                self.best_param_calculator(cv,"macro",by_target_label=True,searcher_class=searcher_class,resampled_data_x=data_X ,resampled_data_y=data_y,resampler=m)
         self.modelList = copy_models
         
-    def best_param_calculator_from_augmented_data(self,cv = 10):
+    def best_param_calculator_from_augmented_data(self,cv = 10,searcher_class=GridSearchCV):
         if self.resampled_data is None:
             return "No augmented data"
         for m,data in self.resampled_data.items():
                 print(f"for augmented data with {m}")
                 data_y = data[self.target]
                 data_X =  data.drop(self.target,axis=1)
-                self.best_param_calculator(cv,"macro",resampled_data_x=data_X, resampled_data_y=data_y,resampler=m)
+                self.best_param_calculator(cv,"macro",resampled_data_x=data_X,searcher_class=searcher_class, resampled_data_y=data_y,resampler=m)
     def best_param_calculator_from_augmented_data_by_label(self,cv = 10):
         if self.resampled_data is None:
             return "No augmented data"

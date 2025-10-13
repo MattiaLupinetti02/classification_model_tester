@@ -1,0 +1,302 @@
+import pandas as pd
+import re
+from typing import Dict
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+import numpy as np
+from sklearn.model_selection import train_test_split, learning_curve, validation_curve, GridSearchCV, cross_val_score
+from typing import Dict, List
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import make_scorer, precision_score, recall_score, accuracy_score,f1_score
+from functools import partial
+import json
+from sklearn.experimental import enable_halving_search_cv 
+from sklearn.model_selection import GridSearchCV, HalvingGridSearchCV, RandomizedSearchCV
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.model_selection import StratifiedKFold
+import re
+from sklearn.ensemble import StackingClassifier, StackingRegressor
+from sklearn.ensemble import VotingClassifier, VotingRegressor
+from sklearn.pipeline import Pipeline
+from visualizer import Visualizer
+from data_handler import DataHandler
+from custom_best_param_calulator import CustomBestParamCalculator
+class ModelTester:
+    modelList = None
+    metrics = None
+    X_train = None
+    y_train = None
+    X_test = None
+    y_test = None
+    y = None
+    original_data = None
+    numeric_features = None
+    categorical_features = None
+    target = None
+    encoded_data = None
+    y_encoded = None
+    df_overall_performance = None
+    df_specific_performance = None
+    #pipelines = []
+    performances = dict()
+    ensambleModelLis = None
+    
+    resampled_data = None
+    boolean_columns = None 
+    def __init__(self, modelList:Dict, metrics:Dict, data:pd.DataFrame, target,ensambleModelList:List = None, resamplingMethods = None):
+        if modelList is None:
+            print("model list is empty")
+        if data is None:
+            print("data is none")
+            return
+        if metrics is None:
+            print("metrics list is empty")
+        if target not in data.columns:
+            print("target column does not exist")
+            return
+        self.target = target
+        self.performances = {}
+        self.performances["overall_base_dt"] = {}
+        self.performances["specific_base_dt"] = {}
+        self.modelList = modelList
+        self.metrics = metrics
+        self.original_data = data
+        self.y = data[target]
+        
+        #print(self.original_data["6MWT"].unique())
+        
+        self.visualizer = Visualizer()  
+        self.data_handler = DataHandler(data,target)
+        data.drop(target, axis=1, inplace=True)
+       
+        if self.modelList is not None and ensambleModelList is not None:
+            self.ensambleModelList = ensambleModelList
+            keys = [str(m).split("(")[0] for m in self.modelList.keys()]
+            self.estimators = [(k,m) for k,m in zip(keys,list(self.modelList.keys()))]
+            self.ensamble_hyperpar = {}
+            for model, hyperpar_list in zip(keys,self.modelList.values()):
+                    for hyperpar_name,values in hyperpar_list.items():
+                        self.ensamble_hyperpar[str(model)+"__" + str(hyperpar_name)] = values
+            for ensamble in self.ensambleModelList:
+                if isinstance(ensamble, (StackingClassifier, StackingRegressor)) or (isinstance(ensamble,(VotingClassifier, VotingRegressor)) and getattr(ensamble,"voting",None)=="soft"):
+                    ensamble.set_params(estimators=self.get_soft_voting_ready_models(self.estimators))
+                else:
+                    ensamble.set_params(estimators=self.estimators)
+                    
+        
+                
+        self.data_handler.encode_target()
+        self.data_handler.encode_features()
+                
+        self.data_handler.concat_encoded_dataset()    
+        
+        if resamplingMethods:
+            self.initialize_performance(resampling_methods=resamplingMethods)
+            self.data_handler.dataResampler(resamplingMethods)
+
+        # Suddividi il dataset in train e test
+        #self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.encoded_data, self.y_encoded, test_size=0.2, random_state=42)
+    
+        # Prepara le performance dei modelli
+        self.initialize_performance()
+        
+
+    def initialize_performance(self,resampling_methods=None):
+        if resampling_methods is not None:
+            for res_method in resampling_methods:
+                self.performances[f"overall_{res_method}".split('(')[0]+"_dt"] = {}
+                self.performances[f"specific_{res_method}".split('(')[0]+"_dt"] = {}
+                for m in self.modelList:
+                    self.performances[f"overall_{res_method}".split('(')[0]+"_dt"][f'{m}'.split('(')[0]] = {}
+                    self.performances[f"specific_{res_method}".split('(')[0]+"_dt"][f'{m}'.split('(')[0]] = {}
+                    for name, metric in self.metrics.items():
+                        for label, index in self.data_handler.label_mapping.items():    
+                            self.performances[f"specific_{res_method}".split('(')[0]+"_dt"][f'{m}'.split('(')[0]][f'{name}_{label}'] = None
+                        self.performances[f"overall_{res_method}".split('(')[0]+"_dt"][f'{m}'.split('(')[0]][f'{name}'] = None
+        elif self.modelList is not None:
+            for m in self.modelList:
+                self.performances["specific_base_dt"][f'{m}'.split('(')[0]] = {}
+                self.performances["overall_base_dt"][f'{m}'.split('(')[0]] = {}
+                for name, metric in self.metrics.items():
+                    for label, index in self.data_handler.label_mapping.items():    
+                        self.performances["specific_base_dt"][f'{m}'.split('(')[0]][f'{name}_{label}'] = None
+                    self.performances["overall_base_dt"][f'{m}'.split('(')[0]][f'{name}'] = None
+        return self.performances
+
+    def get_soft_voting_ready_models(self,models):
+        """
+        Filtra e restituisce i modelli compatibili con soft voting / stacking.
+        
+        Args:
+            models (list): Lista di tuple (nome, modello)
+        
+        Returns:
+            list: Lista di tuple (nome, modello) idonei
+        """
+        ready_models = []
+        for name, model in models:
+            if hasattr(model, "predict_proba"):
+                ready_models.append((name, model))
+            else:
+                print(f"{name} does not support voting or the sticking")
+        return ready_models
+
+
+
+    def scale_data(self,to_scale):
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(to_scale)
+        return X_scaled
+       
+
+    def make_dataframe_performances(self):
+        # Creiamo una lista vuota per raccogliere tutte le informazioni da visualizzare
+
+        # aggiungere un if di controllo iniziale per evitare che si inizi a creare un dataframe di valori None
+        exp_types = []
+        metrics = []
+        hyperparams = []
+        performances = []
+        model_names = []
+        
+        for exp_type, model_metric_hyperpar_perf in self.performances.items():
+            if model_metric_hyperpar_perf is not None:
+                for model, metric_hyperpar_perf in model_metric_hyperpar_perf.items():
+                    if metric_hyperpar_perf is not None:    
+                        for metric, hyperpar_perf in metric_hyperpar_perf.items():
+                            if hyperpar_perf is not None:
+                                for hyperpar,perf in hyperpar_perf.items():
+                                        if perf is not None:
+                                            exp_type = re.split(r'\(', f'{exp_type}')[0]
+                                            exp_types.append(exp_type)
+                                            model_name = re.split(r'\(', f'{model}')[0]  # Estrai solo il nome del modello
+                                            model_names.append(model_name)
+                                            metrics.append(metric)
+                                            hyperparams.append(hyperpar)
+                                            performances.append(perf)
+           # Creiamo un DataFrame con le informazioni raccolte
+        data_to_plot = pd.DataFrame({
+            "Experiment":exp_types,
+            "Model": model_names,
+            "Metric/Class": metrics,
+            "Hyperparameters": hyperparams,
+            "Performance": performances
+        })
+        
+        return data_to_plot
+    
+
+    def best_param_calculator_by_label(self,cv = 10, avg='macro',searcher_class=GridSearchCV):
+        
+        CBPC_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        perf = CBPC_bylabel.best_param_calculator(self.data_handler.encoded_data, self.data_handler.y_encoded,avg,by_target_label=True,searcher_class=searcher_class)
+        
+        for model,p in perf.items():
+            self.performances['specific_base_dt'] = perf
+        
+        #self.best_param_calculator(cv,avg,True,searcher_class=searcher_class)
+
+    def best_param_calculator_ensamble_by_label(self,cv=10, avg='macro', searcher_class=GridSearchCV):
+        if self.ensambleModelList is None:
+            print("No Ensamble Models")
+            return
+        copy_models = self.modelList.copy()
+        self.modelList = {ens:None for ens in self.ensambleModelList}
+        
+        for k in self.modelList.keys():
+            self.modelList[k] = self.ensamble_hyperpar
+        
+        CBPC_ensamblebylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        perf = CBPC_ensamblebylabel.best_param_calculator(self.data_handler.encoded_data,self.data_handler.y_encoded,avg,by_target_label=True,searcher_class=searcher_class)
+        
+        self.performances['specific_base_dt'] = perf
+       
+        self.modelList = copy_models
+
+    def best_param_calculator_ensamble(self,avg='macro',cv=10,searcher_class=GridSearchCV):
+        if self.ensambleModelList is None:
+            print("No Ensamble Models")
+            return 
+        copy_models = self.modelList.copy()
+        self.modelList = {ens:None for ens in self.ensambleModelList}
+
+        for k in self.modelList.keys():
+            self.modelList[k] = self.ensamble_hyperpar
+        
+        CBPC_ensamble = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        perf = CBPC_ensamble.best_param_calculator(self.data_handler.encoded_data,self.data_handler.y_encoded, avg, by_target_label=True,searcher_class=searcher_class)
+        for model,p in perf.items():
+            self.performances['overall_base_dt'][f'{model}'] = p
+        
+        #self.best_param_calculator(cv,'macro',searcher_class=searcher_class)
+        self.modelList = copy_models
+
+    def best_param_calculator_ensamble_from_augmented_data(self,avg='macro',cv=10,searcher_class=GridSearchCV):
+        if self.data_handler.encoded_data is None or self.data_handler.y_encoded is None:
+            print("No augmented data")
+            return 
+        if self.ensambleModelList is None:
+            print("No Ensamble Models")
+            return 
+        copy_models = self.modelList.copy()
+        self.modelList = {ens:None for ens in self.ensambleModelList}
+        for k in self.modelList.keys():
+            self.modelList[k] = self.ensamble_hyperpar
+        CBPC_ensamble_augmented_data = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        
+        for m in self.data_handler.resampled_data_dict:
+                print(f"for augmented data with {m}")
+                X = self.data_handler.resampled_data_dict[m].drop(self.target,axis=1)
+                y = self.data_handler.resampled_data_dict[m][self.target]
+                perf = CBPC_ensamble_augmented_data.best_param_calculator(X,y,avg,searcher_class=searcher_class)
+                for model,p in perf.items():
+                    self.performances[f'overall_{m}_dt'][f'{model}'] = p
+                #self.best_param_calculator(cv,"macro",resampled_data_x=data_x,searcher_class=searcher_class, resampled_data_y=data_y,resampler=m)
+        self.modelList = copy_models
+
+
+    def best_param_calculator_ensamble_from_augmented_data_by_label(self,cv=10,avg='macro', searcher_class=GridSearchCV):
+        if self.data_handler.encoded_data is None or self.data_handler.y_encoded is None:
+            print("No augmented data")
+            return 
+        if self.ensambleModelList is None:
+            print("No Ensamble Models")
+            return 
+        copy_models = self.modelList.copy()
+        self.modelList = {ens:None for ens in self.ensambleModelList}
+        for k in self.modelList.keys():
+            self.modelList[k] = self.ensamble_hyperpar
+        CBPC_ensamble_augmented_data_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        for m in self.data_handler.resampled_data_dict:
+                print(f"for augmented data with {m}")
+                #print(data.drop(self.target,axis=1))
+                #print(data[self.target])
+                X = self.data_handler.resampled_data_dict[m].drop(self.target,axis=1)
+                y = self.data_handler.resampled_data_dict[m][self.target]
+                perf = CBPC_ensamble_augmented_data_bylabel.best_param_calculator(X,y,avg,by_target_label=True,searcher_class=searcher_class)
+                for model,p in perf.items():
+                    self.performances[f'specific_{m}_dt'][f'{model}'] = p
+        self.modelList = copy_models
+    
+    def best_param_calculator_from_augmented_data(self,cv = 10,avg='macro',searcher_class=GridSearchCV):
+        if self.data_handler.encoded_data is None or self.data_handler.y_encoded is None:
+            return "No augmented data"
+        CBPC_augmented_data = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)        
+        for m in self.data_handler.resampled_data_dict:
+                print(f"for augmented data with {m}")
+                X = self.data_handler.resampled_data_dict[m].drop(self.target,axis=1)
+                y = self.data_handler.resampled_data_dict[m][self.target]
+                perf = CBPC_augmented_data.best_param_calculator(X,y,avg,searcher_class=searcher_class)
+                for model,p in perf.items():
+                    self.performances[f'overall_{m}_dt'][f'{model}'] = p
+    def best_param_calculator_from_augmented_data_by_label(self,cv = 10,avg='macro',searcher_class=GridSearchCV):
+        if self.data_handler.encoded_data is None or self.data_handler.y_encoded is None:
+            return "No augmented data"
+        CBPC_augmented_data_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)        
+
+        for m in self.data_handler.resampled_data_dict:
+            X = self.data_handler.resampled_data_dict[m].drop(self.target,axis=1)
+            y = self.data_handler.resampled_data_dict[m][self.target]
+            perf = CBPC_augmented_data_bylabel.best_param_calculator(X,y,avg,by_target_label=True,searcher_class=searcher_class)
+            for model,p in perf.items():
+                    self.performances[f'specific_{m}_dt'][f'{model}'] = p
