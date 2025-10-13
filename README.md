@@ -8,7 +8,6 @@ classDiagram
     class ModelTester {
         +Dict modelList
         +Dict metrics
-        +pd.DataFrame original_data
         +DataHandler data_handler
         +Visualizer visualizer
         +Dict performances
