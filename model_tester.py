@@ -25,24 +25,10 @@ from visualizer import Visualizer
 class ModelTester:
     modelList = None
     metrics = None
-    X_train = None
-    y_train = None
-    X_test = None
-    y_test = None
-    y = None
-    original_data = None
-    numeric_features = None
-    categorical_features = None
     target = None
-    encoded_data = None
-    y_encoded = None
-    df_overall_performance = None
-    df_specific_performance = None
     #pipelines = []
     performances = dict()
     ensambleModelLis = None
-    
-    resampled_data = None
     boolean_columns = None 
     def __init__(self, modelList:Dict, metrics:Dict, data:pd.DataFrame, target,ensambleModelList:List = None, resamplingMethods = None):
         if modelList is None:
@@ -61,10 +47,8 @@ class ModelTester:
         self.performances["specific_base_dt"] = {}
         self.modelList = modelList
         self.metrics = metrics
-        self.original_data = data
         self.y = data[target]
         
-        #print(self.original_data["6MWT"].unique())
         
         self.data_handler = DataHandler(data,target)
         data.drop(target, axis=1, inplace=True)
@@ -81,25 +65,15 @@ class ModelTester:
                 if isinstance(ensamble, (StackingClassifier, StackingRegressor)) or (isinstance(ensamble,(VotingClassifier, VotingRegressor)) and getattr(ensamble,"voting",None)=="soft"):
                     ensamble.set_params(estimators=self.get_soft_voting_ready_models(self.estimators))
                 else:
-                    ensamble.set_params(estimators=self.estimators)
-                    
-        
-                
+                    ensamble.set_params(estimators=self.estimators)      
         self.data_handler.encode_target()
-        self.data_handler.encode_features()
-                
+        self.data_handler.encode_features()         
         self.data_handler.concat_encoded_dataset()    
-        
         self.visualizer = Visualizer(self.data_handler.encoded_data,self.target,self.data_handler.numeric_features,self.data_handler.categorical_features,self.data_handler.boolean_columns,self.data_handler.resampled_data_dict)
-
         if resamplingMethods:
             self.initialize_performance(resampling_methods=resamplingMethods)
             self.data_handler.dataResampler(resamplingMethods)
 
-        # Suddividi il dataset in train e test
-        #self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.encoded_data, self.y_encoded, test_size=0.2, random_state=42)
-    
-        # Prepara le performance dei modelli
         self.initialize_performance()
         
 
