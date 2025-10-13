@@ -14,6 +14,7 @@ class Visualizer:
         self.categorical_features = categorical_features
         self.boolean_columns = boolean_features
         if resampled_data:
+            print("resampled data provided to visualizer")
             self.resampled_data = resampled_data
         
 

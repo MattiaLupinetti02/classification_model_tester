@@ -21,6 +21,7 @@ from sklearn.pipeline import Pipeline
 from visualizer import Visualizer
 from data_handler import DataHandler
 from custom_best_param_calulator import CustomBestParamCalculator
+from visualizer import Visualizer
 class ModelTester:
     modelList = None
     metrics = None
@@ -65,7 +66,6 @@ class ModelTester:
         
         #print(self.original_data["6MWT"].unique())
         
-        self.visualizer = Visualizer()  
         self.data_handler = DataHandler(data,target)
         data.drop(target, axis=1, inplace=True)
        
@@ -90,6 +90,8 @@ class ModelTester:
                 
         self.data_handler.concat_encoded_dataset()    
         
+        self.visualizer = Visualizer(self.data_handler.encoded_data,self.target,self.data_handler.numeric_features,self.data_handler.categorical_features,self.data_handler.boolean_columns,self.data_handler.resampled_data_dict)
+
         if resamplingMethods:
             self.initialize_performance(resampling_methods=resamplingMethods)
             self.data_handler.dataResampler(resamplingMethods)

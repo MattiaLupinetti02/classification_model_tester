@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
-
+from visualizer import Visualizer
 
 class DataHandler:
     """
@@ -21,7 +21,7 @@ class DataHandler:
         self.encoder = OneHotEncoder(drop='first', sparse_output=False)
         self.label_encoder = LabelEncoder()
         self.resampled_data_dict = None
-
+        
         # Rilevamento automatico tipi di feature
         self.categorical_features = {
             i: col for i, col in enumerate(data.columns)
@@ -30,15 +30,14 @@ class DataHandler:
         self.boolean_columns = data.select_dtypes(include=bool)
         self.numeric_features = data.select_dtypes(exclude=['object'])
 
+        
+
         # Placeholder per dati codificati
         self.encoded_data = None
         self.y_encoded = None
         self.mapping = {}
 
-    # ---------------------------------------------------------
-    #  ENCODING FUNZIONI
-    # ---------------------------------------------------------
-
+    
     def encode_features(self) -> pd.DataFrame:
         """Applica OneHotEncoding alle feature categoriali."""
         encoded_array = self.encoder.fit_transform(self.original_data[self.categorical_features.values()])
