@@ -69,7 +69,7 @@ class ModelTester:
         self.data_handler.encode_target()
         self.data_handler.encode_features()         
         self.data_handler.concat_encoded_dataset()    
-        self.visualizer = Visualizer(self.data_handler.encoded_data,self.target,self.data_handler.numeric_features,self.data_handler.categorical_features,self.data_handler.boolean_columns,self.data_handler.resampled_data_dict)
+        self.visualizer = Visualizer(self.data_handler.encoded_data,self.data_handler.encode_target,self.target,self.data_handler.numeric_features,self.data_handler.categorical_features,self.data_handler.boolean_columns,self.modelList,self.data_handler.resampled_data_dict)
         if resamplingMethods:
             self.initialize_performance(resampling_methods=resamplingMethods)
             self.data_handler.dataResampler(resamplingMethods)
@@ -276,3 +276,115 @@ class ModelTester:
             perf = CBPC_augmented_data_bylabel.best_param_calculator(X,y,avg,by_target_label=True,searcher_class=searcher_class)
             for model,p in perf.items():
                     self.performances[f'specific_{m}_dt'][f'{model}'] = p
+
+    def plot_pie_chart(self, resampled= True, save=False):
+        if resampled and self.data_handler.resampled_data_dict:
+            for method, data in self.data_handler.resampled_data_dict.items():
+                print(f"Plotting pie chart for resampled data with method: {method}")
+                y_resampled = data[self.target]
+                self.visualizer.plot_pie_chart(y_resampled, self.target, save=save)
+        else:
+            self.visualizer.plot_pie_chart(self.y, self.target, save=save)
+    
+    def plot_boxplots(self, resampled= False, save=False):
+        if resampled and self.data_handler.resampled_data_dict:
+            for method, data in self.data_handler.resampled_data_dict.items():
+                print(f"Plotting boxplots for resampled data with method: {method}")
+                self.visualizer.plot_boxplots(data, save=save)
+        else:
+            print("Plotting boxplots for original data")
+            self.visualizer.plot_boxplots(self.data_handler.encoded_data, save=save)
+    
+    def plot_numeric_distribution(self, resampled= True, save=False):
+        if resampled and self.data_handler.resampled_data_dict:
+            for method, data in self.data_handler.resampled_data_dict.items():
+                print(f"Plotting numeric distribution for resampled data with method: {method}")
+                self.visualizer.plot_numeric_distribution(self.data_handler.original_data, save=save)
+        else:
+            self.visualizer.plot_numeric_distribution(self.data_handler.original_data, save=save)
+        
+    def plot_correlation_matrix(self, resampled= True, save=False):
+        if resampled and self.data_handler.resampled_data_dict:
+            for method, data in self.data_handler.resampled_data_dict.items():
+                print(f"Plotting correlation matrix for resampled data with method: {method}")
+                self.visualizer.plot_correlation_matrix(self.data_handler.original_data, save=save)
+        else:
+            self.visualizer.plot_correlation_matrix(self.data_handler.original_data, save=save)
+    
+    def plot_binary_distribution(self, resampled= False, save=False):
+        if resampled and self.data_handler.resampled_data_dict:
+            for method, data in self.data_handler.resampled_data_dict.items():
+                print(f"Plotting binary distribution for resampled data with method: {method}")
+                self.visualizer.plot_binary_distribution(data, save=save)
+        else:
+            self.visualizer.plot_binary_distribution(self.data_handler.original_data, save=save)
+
+
+    def learning_curves(self,resampled = False):
+        for model,params in self.modelList.items():
+                # Disegna le learing curve
+            
+            if resampled:
+                for method, data in self.data_handler.resampled_data_dict.items():
+                    print(f"Learning curve for model: {model} with {method}")
+                    self.visualizer.plot_learning_curve(model, data.drop(self.target,axis = 1), data[self.target],name_method=method)
+            else:
+                self.visualizer.plot_learning_curve(model, self.data_handler.encoded_data, self.data_handler.y_encoded)
+
+    def validation_curves(self, cv=5, resampled=False,save=False):
+        for model, params in self.modelList.items():
+            model_name = re.split(r'\(', f'{model}')[0]  # Estrai solo il nome del modello
+            
+            # Determiniamo il numero totale di grafici per il modello corrente
+            n = len(params)  # Numero di parametri del modello
+            if n == 0:
+                print(f"Model {model_name} has no parameters to validate.")
+                continue  # Salta questo modello
+    
+            cols = 2  # Numero di colonne
+            rows = (n + cols - 1) // cols  # Calcola il numero di righe
+            
+            # Creiamo una figura per il modello corrente
+            fig, axes = plt.subplots(rows, cols, figsize=(10, 5 * rows))
+            axes = axes.flatten()  # Flattiamo per accedere facilmente agli assi
+            
+            plot_index = 0
+            for param_name, param_values in params.items():
+                print(f"Validation curve for model: {model_name} with parameter: {param_name}")
+                
+                # Imposta il titolo dell'asse corrente
+                axes[plot_index].set_title(model_name)  
+    
+                # Passa l'asse corrente alla funzione per disegnare il grafico
+                if resampled == False:
+                    self.visualizer.plot_validation_curve(
+                        model, self.scale_data(self.data_handler.encoded_data), self.data_handler.y_encoded,
+                        param_name, param_values, cv, ax=axes[plot_index])
+                else:
+                    for method,data in self.data_handler.resampled_data_dict.items():
+                        self.visualizer.plot_validation_curve(
+                            model, self.scale_data(data.drop(self.target,axis=1)), data[self.target],
+                            param_name, param_values, cv, ax=axes[plot_index])
+                
+                plot_index += 1
+    
+            # Rimuovi eventuali assi vuoti nella griglia
+            for i in range(plot_index, len(axes)):
+                fig.delaxes(axes[i])
+    
+            # Salva l'immagine per il modello corrente
+            if resampled and save:
+                for method in self.data_handler.resampled_data_dict.keys():
+                    resampling_method_name = method.split('(')[0]
+                    
+                    fig.savefig(f'validation_curves_{model_name}_on_augmented_data_{resampling_method_name}.png', dpi=300, bbox_inches='tight')
+            elif save:
+                fig.savefig(f'validation_curves_{model_name}.png', dpi=300, bbox_inches='tight')
+            
+                
+            print(f"Saved validation curves for {model_name} as validation_curves_{model_name}.png")
+            
+            plt.tight_layout()  # Migliora la spaziatura
+            plt.show()  # Mostra la figura
+            plt.close(fig)  # Chiudi la figura per liberare memoria
+
