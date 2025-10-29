@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
-from visualizer import Visualizer
 
 class DataHandler:
     """
@@ -18,7 +17,7 @@ class DataHandler:
     def __init__(self, data: pd.DataFrame, target: str):
         self.original_data = data.copy()
         self.target = target
-        self.encoder = OneHotEncoder(drop='first', sparse_output=False)
+        self.encoder = OneHotEncoder( sparse_output=False)
         self.label_encoder = LabelEncoder()
         self.resampled_data_dict = None
         

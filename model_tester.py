@@ -18,10 +18,10 @@ import re
 from sklearn.ensemble import StackingClassifier, StackingRegressor
 from sklearn.ensemble import VotingClassifier, VotingRegressor
 from sklearn.pipeline import Pipeline
-from visualizer import Visualizer
-from data_handler import DataHandler
-from custom_best_param_calulator import CustomBestParamCalculator
-from visualizer import Visualizer
+from .data_handler import DataHandler
+from .custom_best_param_calulator import CustomBestParamCalculator
+from .visualizer import Visualizer
+
 class ModelTester:
     modelList = None
     metrics = None
@@ -373,12 +373,12 @@ class ModelTester:
                 fig.delaxes(axes[i])
     
             # Salva l'immagine per il modello corrente
-            if resampled and save:
+            if resampled and save == True:
                 for method in self.data_handler.resampled_data_dict.keys():
                     resampling_method_name = method.split('(')[0]
                     
                     fig.savefig(f'validation_curves_{model_name}_on_augmented_data_{resampling_method_name}.png', dpi=300, bbox_inches='tight')
-            elif save:
+            elif save == True:
                 fig.savefig(f'validation_curves_{model_name}.png', dpi=300, bbox_inches='tight')
             
                 
