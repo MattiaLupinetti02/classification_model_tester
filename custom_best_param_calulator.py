@@ -13,21 +13,22 @@ from optuna.trial import TrialState
 from optuna.distributions import CategoricalDistribution
 import itertools
 from typing import Dict, Any, Optional
+from .create_optuna_study import create_optuna_study
 
 class MemoryEfficientGridSampler(BaseSampler):
-    """Sampler che genera combinazioni on-demand senza memory overhead"""
+    """Grid search deterministica memory-efficient per Optuna."""
     
     def __init__(self, search_space: Dict[str, list]):
         self.search_space = search_space
         self._param_iter = None
         self._search_space = self._convert_to_optuna_space(search_space)
         
-    def _convert_to_optuna_space(self, search_space: Dict[str, list]) -> Dict[str, CategoricalDistribution]:
-        """Converte lo spazio di ricerca in formato Optuna"""
-        optuna_space = {}
-        for param_name, values in search_space.items():
-            optuna_space[param_name] = CategoricalDistribution(values)
-        return optuna_space
+    def _convert_to_optuna_space(self, search_space: Dict[str, list]):
+        """Converte lo spazio di ricerca in formato Optuna."""
+        return {
+            param_name: CategoricalDistribution(values)
+            for param_name, values in search_space.items()
+        }
         
     def reseed_rng(self) -> None:
         self._param_iter = None
@@ -36,30 +37,31 @@ class MemoryEfficientGridSampler(BaseSampler):
         return self._search_space
         
     def sample_relative(self, study, trial, search_space):
+        """Restituisce una combinazione alla volta"""
         if self._param_iter is None:
             self._param_iter = self._generate_param_combinations()
-            
         try:
             return next(self._param_iter)
         except StopIteration:
-            return {}
+            return None  # ✅ Importante: None segnala fine ricerca
             
     def sample_independent(self, study, trial, param_name, param_distribution):
-        """Metodo ASTRATTO richiesto - restituisce un valore per parametri indipendenti"""
-        # Per grid search, tutti i parametri sono gestiti in sample_relative
-        return param_distribution.to_internal_repr(param_distribution.choices[0])
+        # Non usato nel grid: restituisce il primo valore per compatibilità
+        return param_distribution.choices[0]
             
     def _generate_param_combinations(self):
-        """Generatore che produce una combinazione alla volta"""
+        """Generatore che produce combinazioni nativamente tipizzate"""
         keys = list(self.search_space.keys())
         value_lists = [self.search_space[key] for key in keys]
-        
-        # Crea il product generator (non lista!)
-        product_gen = itertools.product(*value_lists)
-        
-        for values in product_gen:
-            params = dict(zip(keys, values))
+        for values in itertools.product(*value_lists):
+            params = {
+                k: (bool(v) if isinstance(v, np.bool_) else
+                    int(v) if isinstance(v, np.integer) else
+                    float(v) if isinstance(v, np.floating) else v)
+                for k, v in zip(keys, values)
+            }
             yield params
+
 
 class CustomBestParamCalculator:
     def __init__(self, models:dict, metrics:dict, label_mapping:dict, cv=5, searcher_class=None):
@@ -122,32 +124,63 @@ class CustomBestParamCalculator:
         
         return converted_grid
 
-    def create_optuna_objective(self, model, X, y, scorer):
-        """Crea una funzione objective che riceve lo scorer già pronto"""
+    def create_optuna_objective(self, model, X, y, scorer, param_grid=None):
+        """
+        Crea una funzione objective che riceve lo scorer già pronto.
+        Se viene passato un param_grid, Optuna genera i parametri in base ai valori presenti.
+        """
         def objective(trial):
             try:
-                print(f"Testing parameters: {trial.params}")
-                
+                # 🔹 Se non viene passato param_grid, usa direttamente i parametri del trial
+                if param_grid is None:
+                    params = trial.params
+                else:
+                    params = {}
+                    for name, values in param_grid.items():
+                        # Rimuovi valori None o non validi
+                        if values is None or len(values) == 0:
+                            continue
+
+                        first_val = values[0]
+
+                        # Se i valori sono numerici, scegli un intervallo continuo
+                        if all(isinstance(v, (int, np.integer)) for v in values) and not all(isinstance(v, bool) for v in values):
+                            low, high = int(min(values)), int(max(values))
+                            params[name] = trial.suggest_int(name, low, high)
+
+                        elif all(isinstance(v, (float, np.floating)) for v in values):
+                            low, high = float(min(values)), float(max(values))
+                            params[name] = trial.suggest_float(name, low, high)
+
+                        else:
+                            params[name] = trial.suggest_categorical(name, values)
+
+
+
+
+                print(f"Testing parameters: {params}")
+                # 🔹 Clona il modello per evitare side effects
                 current_model = clone(model)
-                current_model.set_params(**trial.params)
-                
-                # ✅ USA DIRETTAMENTE lo scorer passato come parametro
+                current_model.set_params(**params)
+
+                # 🔹 Cross-validation con lo scorer fornito
                 scores = cross_val_score(
-                    current_model, X, y, 
-                    cv=self.cv, 
-                    scoring=scorer  # Usa lo scorer fornito
+                    current_model, X, y,
+                    cv=self.cv,
+                    scoring=scorer
                 )
-                
-                score = scores.mean()
-                print(f"Score: {score:.4f} for params: {trial.params}")
-                
+
+                score = float(np.mean(scores))
+                print(f"Score: {score:.4f} for params: {params}")
+
                 return score
-                    
+
             except Exception as e:
-                print(f"Error in trial with params {trial.params}: {e}")
+                print(f"Error in trial with params {params}: {e}")
                 return -1.0
-            
+
         return objective
+
 
     def best_param_calculator(
         self,
@@ -156,9 +189,9 @@ class CustomBestParamCalculator:
         avg: str = 'binary',
         by_target_label: bool | None = None,
         searcher_class = GridSearchCV,
-        searcher_kwargs: dict | None = None
+        searcher_kwargs: dict | None = None,
+        brute_force: bool = False
     ):
-        
         if by_target_label:
             self.scorers = self.make_metrics_by_labels(avg=avg)
         else:
@@ -180,6 +213,7 @@ class CustomBestParamCalculator:
                     # SE E' OPTUNA
             if searcher_class.__name__ == 'OptunaStudy':
                 param_grid = self.convert_to_native_types(param_grid)
+                
                 # Calcola il numero totale di combinazioni
                 total_trials = self.calculate_total_combinations(param_grid)
                 print(f"  Total combinations to test: {total_trials}")
@@ -189,34 +223,43 @@ class CustomBestParamCalculator:
                     
                     scorer = self.scorers[scorer_name]  # Prendi lo scorer dal dizionario
                     
-                    # ✅ Passa lo scorer già creato alla objective
                     objective_func = self.create_optuna_objective(
-                        model, 
-                        self.scale_data(X), 
-                        y, 
-                        scorer  # Passa lo scorer direttamente
+                        model,
+                        self.scale_data(X),
+                        y,
+                        scorer,
+                        param_grid=param_grid 
                     )
-                    
+
                     # Filtra solo i parametri che sono liste (per grid search vero)
                     grid_params = {
                         k: v for k, v in param_grid.items() 
                         if hasattr(v, '__len__') and not hasattr(v, 'rvs')
                     }
                     
-                    if grid_params:
+                    if brute_force == True:
+                        print("Running brute-force grid search with MemoryEfficientGridSampler")
                         sampler = MemoryEfficientGridSampler(grid_params)
                         n_trials = total_trials
+                        study = optuna.create_study(direction="maximize", sampler=sampler)
                     else:
-                        sampler = optuna.samplers.RandomSampler(seed=42)
-                        n_trials = 100
+                        print(" Running TPE-based optimization with pruning")
+                        study = create_optuna_study(
+                            direction="maximize",
+                            storage_path="optuna_results.db",
+                            sampler_type="tpe",
+                            seed=42
+                        )
+                        n_trials = 100 
                     
-                    study = optuna.create_study(
-                        direction='maximize',
-                        sampler=sampler
-                    )
                     
                     try:
-                        study.optimize(objective_func, n_trials=n_trials, show_progress_bar=True)
+                        study.optimize(
+                            objective_func,
+                            n_trials=n_trials,
+                            callbacks=[save_best_callback],
+                            show_progress_bar=True
+                        )
                         
                         best_params = study.best_params
                         best_score = study.best_value
@@ -264,18 +307,19 @@ class CustomBestParamCalculator:
                         searcher.param_distributions = param_grid
 
                     searcher.fit(self.scale_data(X), y)
+                    best_params = searcher.best_params_
 
-            for scorer_name in self.scorers.keys():
-                best_params = searcher.best_params_
-                best_score = searcher.cv_results_[f'mean_test_{scorer_name}'][searcher.best_index_]
-                print(f"\tBest parameters for {scorer_name}: {best_params}")
-                print(f"\tBest score for {scorer_name}: {best_score}")
-                perf[model_name][scorer_name] = {
-                    json.dumps({
-                        k: (int(v) if isinstance(v, np.integer) else float(v) if isinstance(v, np.floating) else v) 
-                        for k, v in best_params.items()
-                    }): best_score
-                }
+                for scorer_name in self.scorers.keys():
+                    best_params = searcher.best_params_
+                    best_score = searcher.cv_results_[f'mean_test_{scorer_name}'][searcher.best_index_]
+                    print(f"\tBest parameters for {scorer_name}: {best_params}")
+                    print(f"\tBest score for {scorer_name}: {best_score}")
+                    perf[model_name][scorer_name] = {
+                        json.dumps({
+                            k: (int(v) if isinstance(v, np.integer) else float(v) if isinstance(v, np.floating) else v) 
+                            for k, v in best_params.items()
+                        }): best_score
+                    }
         
         return perf
             
@@ -293,3 +337,9 @@ def custom_scorer(target_class, metric, avg='macro'):
         else:
             return metric(y_true, y_pred, labels=[target_class], average=avg, zero_division=0)
     return score_for_class
+
+def save_best_callback(study, trial):
+    if study.best_trial.number == trial.number:
+        print(f"💾 Saving best trial #{trial.number} with value {trial.value:.4f}")
+        with open("best_params.json", "w") as f:
+            json.dump(study.best_params, f, indent=4)
