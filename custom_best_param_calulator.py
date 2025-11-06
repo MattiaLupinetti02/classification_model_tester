@@ -14,6 +14,12 @@ from optuna.distributions import CategoricalDistribution
 import itertools
 from typing import Dict, Any, Optional
 from .create_optuna_study import create_optuna_study
+import signal
+from functools import wraps
+import threading
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import functools
+
 
 class MemoryEfficientGridSampler(BaseSampler):
     """Grid search deterministica memory-efficient per Optuna."""
@@ -124,6 +130,7 @@ class CustomBestParamCalculator:
         
         return converted_grid
 
+
     def create_optuna_objective(self, model, X, y, scorer, param_grid=None):
         """
         Crea una funzione objective che riceve lo scorer già pronto.
@@ -163,11 +170,11 @@ class CustomBestParamCalculator:
                 current_model = clone(model)
                 current_model.set_params(**params)
 
-                # 🔹 Cross-validation con lo scorer fornito
                 scores = cross_val_score(
                     current_model, X, y,
                     cv=self.cv,
-                    scoring=scorer
+                    scoring=scorer,
+                    n_jobs = 1
                 )
 
                 score = float(np.mean(scores))
@@ -250,15 +257,17 @@ class CustomBestParamCalculator:
                             sampler_type="tpe",
                             seed=42
                         )
-                        n_trials = 100 
+                        n_trials = 100
                     
                     
                     try:
+                        print("optimization")
                         study.optimize(
                             objective_func,
                             n_trials=n_trials,
                             callbacks=[save_best_callback],
-                            show_progress_bar=True
+                            show_progress_bar=True,
+                            timeout = 7200
                         )
                         
                         best_params = study.best_params
