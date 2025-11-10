@@ -160,7 +160,64 @@ class ModelTester:
         })
         
         return data_to_plot
-    
+    def implement_calculated_models(self,cv=10,avg='binary',performance_dataset:pd.DataFrame | None = None):
+        if performance_dataset is not None:
+            if performance_dataset.columns.tolist() != ['Experiment', 'Model', 'Metric/Class', 'Hyperparameters', 'Performance']:
+                print("Performance dataset columns do not match expected format")
+                return
+            elif performance_dataset.empty:
+                print("Performance dataset is empty")
+                return
+            
+            elif performance_dataset['Performance'].isnull().all():
+                print("No calculated performances to implement")
+                return
+            
+            to_implement = performance_dataset
+        else:
+            to_implement = self.make_dataframe_performances()
+        to_implement = to_implement[to_implement['Performance'].notnull()]
+        CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv)
+        print(to_implement)
+        print(self.modelList)
+        for m in self.modelList.keys():
+            model_to_implement = to_implement[to_implement['Model'] == re.split(r'\(', f'{m}')[0]]
+            #hyperparameters = json.loads(model_to_implement['Hyperparameters'].replace("'", "\""))
+            hyperparameters = model_to_implement['Hyperparameters']
+            print(hyperparameters)
+            for hp in hyperparameters:
+                hp_dict = json.loads(hp.replace("'", "\""))
+                print(f"Calculating cross val score for model: {m} whith hyperparameters: {hp_dict}")
+                CBPC.validation_model_CV(m, self.data_handler.encoded_data, self.data_handler.y_encoded,avg=avg)
+                CBPC.validation_model_CV(m, self.data_handler.encoded_data, self.data_handler.y_encoded,avg=avg,by_label=True)
+                for k,data in self.data_handler.resampled_data_dict.items():
+                    print(f"Calculating cross val score for model: {m} on augmented data with method: {k}")
+                    CBPC.validation_model_CV(m, data.drop(self.target,axis=1), data[self.target],avg=avg)
+                    CBPC.validation_model_CV(m, data.drop(self.target,axis=1), data[self.target],avg=avg,by_label=True)
+        
+
+        for m in self.ensambleModelList:
+            model_to_implement = to_implement[to_implement['Model'] == re.split(r'\(', f'{m}')[0]]
+            #hyperparameters = json.loads(model_to_implement['Hyperparameters'].replace("'", "\""))
+            hyperparameters = model_to_implement['Hyperparameters']
+            print(hyperparameters)
+            for hp in hyperparameters:
+                hp_dict = json.loads(hp.replace("'", "\""))
+                print(f"Calculating cross val score for model: {m} whith hyperparameters: {hp_dict}")
+                CBPC.validation_model_CV(m, self.data_handler.encoded_data, self.data_handler.y_encoded,avg=avg)
+                CBPC.validation_model_CV(m, self.data_handler.encoded_data, self.data_handler.y_encoded,avg=avg,by_label=True)
+                for k,data in self.data_handler.resampled_data_dict.items():
+                    print(f"Calculating cross val score for model: {m} on augmented data with method: {k}")
+                    CBPC.validation_model_CV(m, data.drop(self.target,axis=1), data[self.target],avg=avg)
+                    CBPC.validation_model_CV(m, data.drop(self.target,axis=1), data[self.target],avg=avg,by_label=True)
+
+
+    def best_param_calculator(self,cv = 10, avg='macro',searcher_class=GridSearchCV):
+        CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        perf = CBPC.best_param_calculator(self.data_handler.encoded_data, self.data_handler.y_encoded,avg,searcher_class=searcher_class)
+        
+        for model,p in perf.items():
+            self.performances['overall_base_dt'][f'{model}'] = p
 
     def best_param_calculator_by_label(self,cv = 10, avg='macro',searcher_class=GridSearchCV):
         

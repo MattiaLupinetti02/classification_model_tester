@@ -19,7 +19,24 @@ from functools import wraps
 import threading
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import functools
+import os
+import time
+import signal
+from sklearn.base import clone
+from sklearn.model_selection import cross_val_score
+import numpy as np
 
+# CONFIGURAZIONE ANTI-DEADLOCK GLOBALE
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['XGBOOST_VERBOSE'] = '0'
+
+class TimeoutException(Exception):
+    pass
+
+def timeout_handler(signum, frame):
+    raise TimeoutException("Trial exceeded time limit")
 
 class MemoryEfficientGridSampler(BaseSampler):
     """Grid search deterministica memory-efficient per Optuna."""
@@ -131,12 +148,14 @@ class CustomBestParamCalculator:
         return converted_grid
 
 
-    def create_optuna_objective(self, model, X, y, scorer, param_grid=None):
+    def create_optuna_objective(self, model, X, y, scorer, param_grid=None, timeout=1200):
         """
-        Crea una funzione objective che riceve lo scorer già pronto.
+        Crea una funzione objective con protezione anti-deadlock.
         Se viene passato un param_grid, Optuna genera i parametri in base ai valori presenti.
         """
         def objective(trial):
+            start_time = time.time()
+            
             try:
                 # 🔹 Se non viene passato param_grid, usa direttamente i parametri del trial
                 if param_grid is None:
@@ -162,29 +181,87 @@ class CustomBestParamCalculator:
                         else:
                             params[name] = trial.suggest_categorical(name, values)
 
-
-
-
                 print(f"Testing parameters: {params}")
+                
+                # 🔹 Controllo timeout pre-training
+                if time.time() - start_time > timeout:
+                    print(f"⏰ Trial {trial.number} pruned - timeout before training")
+                    return float('-inf')
+                
                 # 🔹 Clona il modello per evitare side effects
                 current_model = clone(model)
                 current_model.set_params(**params)
+                
+                # 🔹 Imposta n_jobs=1 per tutti i modelli per evitare deadlock
+                if hasattr(current_model, 'n_jobs'):
+                    current_model.set_params(n_jobs=1)
+                if hasattr(current_model, 'thread_count'):
+                    current_model.set_params(thread_count=1)
 
-                scores = cross_val_score(
-                    current_model, X, y,
-                    cv=self.cv,
-                    scoring=scorer,
-                    n_jobs = 1
-                )
+                # 🔹 Cross-validation con timeout
+                try:
+                    # Configura signal per timeout (funziona su Linux/Mac)
+                    try:
+                        signal.signal(signal.SIGALRM, timeout_handler)
+                        signal.alarm(timeout)
+                    except AttributeError:
+                        pass  # Windows non supporta SIGALRM
+                    
+                    scores = cross_val_score(
+                        current_model, X, y,
+                        cv=self.cv,
+                        scoring=scorer,
+                        n_jobs=1  # 🔽 FORZA single-thread
+                    )
+                    
+                    # Disabilita l'allarme
+                    try:
+                        signal.alarm(0)
+                    except AttributeError:
+                        pass
+                        
+                except TimeoutException:
+                    print(f"⏰ Trial {trial.number} timeout during cross-validation")
+                    return float('-inf')
+                    
+                except Exception as e:
+                    print(f"❌ Cross-validation error in trial {trial.number}: {e}")
+                    return float('-inf')
+
+                # 🔹 Controllo timeout post-training
+                elapsed_time = time.time() - start_time
+                if elapsed_time > timeout:
+                    print(f"⏰ Trial {trial.number} pruned - exceeded {timeout}s limit ({elapsed_time:.1f}s)")
+                    return float('-inf')
 
                 score = float(np.mean(scores))
-                print(f"Score: {score:.4f} for params: {params}")
+                print(f"✅ Trial {trial.number} completed: {score:.4f} in {elapsed_time:.1f}s")
 
+                # 🔹 Aggiungi metriche aggiuntive come attributi
+                trial.set_user_attr('time', elapsed_time)
+                trial.set_user_attr('std', float(np.std(scores)))
+                
                 return score
 
+            except TimeoutException:
+                print(f"⏰ Trial {trial.number} timeout overall")
+                return float('-inf')
+                
             except Exception as e:
-                print(f"Error in trial with params {params}: {e}")
+                elapsed_time = time.time() - start_time
+                print(f"❌ Error in trial {trial.number} after {elapsed_time:.1f}s: {e}")
+                
+                # Se è passato troppo tempo, probabilmente è un deadlock
+                if elapsed_time > timeout:
+                    return float('-inf')
                 return -1.0
+
+            finally:
+                # 🔹 Cleanup garantito
+                try:
+                    signal.alarm(0)
+                except AttributeError:
+                    pass
 
         return objective
 
@@ -257,7 +334,7 @@ class CustomBestParamCalculator:
                             sampler_type="tpe",
                             seed=42
                         )
-                        n_trials = 100
+                        n_trials = 10
                     
                     
                     try:
@@ -267,7 +344,7 @@ class CustomBestParamCalculator:
                             n_trials=n_trials,
                             callbacks=[save_best_callback],
                             show_progress_bar=True,
-                            timeout = 7200
+                            timeout = 1200
                         )
                         
                         best_params = study.best_params
@@ -334,7 +411,24 @@ class CustomBestParamCalculator:
             
     def scale_data(self, X: pd.DataFrame) -> np.ndarray:
         return self.scaler.fit_transform(X)
-
+    def validation_model_CV(self,model, X: pd.DataFrame, y: np.ndarray ,cv=5,by_label = False,avg='binary') -> Dict[str, Any]:
+        cv_strategy = StratifiedKFold(n_splits=cv, shuffle=True, random_state=42)
+    
+        if by_label == True and avg != 'binary':
+            scoring_metrics = self.make_metrics_by_labels(avg=avg)
+        else:
+            scoring_metrics = self.make_metrics(avg=avg)
+        for name,scoring in scoring_metrics.items():
+            
+            scores = cross_val_score(
+                model, self.scale_data(X), y,
+                cv=cv_strategy,
+                scoring=scoring,
+                n_jobs = -1
+            )
+            print(f"\t Score ({name}): ")
+            print(f"\t{float(np.mean(scores))}")
+            
 class OptunaStudy:
     def __init__(self, *args, **kwargs):
         pass
