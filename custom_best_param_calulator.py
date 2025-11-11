@@ -26,7 +26,6 @@ from sklearn.base import clone
 from sklearn.model_selection import cross_val_score
 import numpy as np
 
-# CONFIGURAZIONE ANTI-DEADLOCK GLOBALE
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -87,7 +86,8 @@ class MemoryEfficientGridSampler(BaseSampler):
 
 
 class CustomBestParamCalculator:
-    def __init__(self, models:dict, metrics:dict, label_mapping:dict, cv=5, searcher_class=None):
+    def __init__(self, models:dict, metrics:dict, label_mapping:dict, cv=5, searcher_class=None,n_jobs = 1):
+        self.n_jobs = n_jobs
         self.models = models
         self.metrics = metrics
         self.cv = cv
@@ -148,7 +148,7 @@ class CustomBestParamCalculator:
         return converted_grid
 
 
-    def create_optuna_objective(self, model, X, y, scorer, param_grid=None, timeout=1200):
+    def create_optuna_objective(self, model, X, y, scorer, param_grid=None, timeout=7200):
         """
         Crea una funzione objective con protezione anti-deadlock.
         Se viene passato un param_grid, Optuna genera i parametri in base ai valori presenti.
@@ -334,11 +334,10 @@ class CustomBestParamCalculator:
                             sampler_type="tpe",
                             seed=42
                         )
-                        n_trials = 10
+                        n_trials = 1000
                     
                     
                     try:
-                        print("optimization")
                         study.optimize(
                             objective_func,
                             n_trials=n_trials,
@@ -376,11 +375,13 @@ class CustomBestParamCalculator:
                         refit=list(self.scorers.keys())[0],
                         cv=cv_strategy,
                         verbose=1,
+                        n_jobs=self.n_jobs,
                         **searcher_kwargs
                     )
                 else:
                     searcher = searcher_class(
                         estimator=model,
+                        n_jobs=self.n_jobs,
                         param_grid=param_grid,         
                         scoring='f1' if searcher_class == HalvingGridSearchCV else self.scorers,
                         refit=list(self.scorers.keys())[0],

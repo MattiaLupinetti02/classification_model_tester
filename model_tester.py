@@ -30,7 +30,7 @@ class ModelTester:
     performances = dict()
     ensambleModelLis = None
     boolean_columns = None 
-    def __init__(self, modelList:Dict, metrics:Dict, data:pd.DataFrame, target,ensambleModelList:List = None, resamplingMethods = None):
+    def __init__(self, modelList:Dict, metrics:Dict, data:pd.DataFrame, target,ensambleModelList:List = None, resamplingMethods = None,n_jobs = 1):
         if modelList is None:
             print("model list is empty")
         if data is None:
@@ -41,6 +41,7 @@ class ModelTester:
         if target not in data.columns:
             print("target column does not exist")
             return
+        self.n_jobs = n_jobs
         self.target = target
         self.performances = {}
         self.performances["overall_base_dt"] = {}
@@ -177,7 +178,7 @@ class ModelTester:
         else:
             to_implement = self.make_dataframe_performances()
         to_implement = to_implement[to_implement['Performance'].notnull()]
-        CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv)
+        CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,n_jobs=self.n_jobs)
         print(to_implement)
         print(self.modelList)
         for m in self.modelList.keys():
@@ -213,7 +214,7 @@ class ModelTester:
 
 
     def best_param_calculator(self,cv = 10, avg='macro',searcher_class=GridSearchCV):
-        CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         perf = CBPC.best_param_calculator(self.data_handler.encoded_data, self.data_handler.y_encoded,avg,searcher_class=searcher_class)
         
         for model,p in perf.items():
@@ -221,7 +222,7 @@ class ModelTester:
 
     def best_param_calculator_by_label(self,cv = 10, avg='macro',searcher_class=GridSearchCV):
         
-        CBPC_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        CBPC_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         perf = CBPC_bylabel.best_param_calculator(self.data_handler.encoded_data, self.data_handler.y_encoded,avg,by_target_label=True,searcher_class=searcher_class)
         
         for model,p in perf.items():
@@ -239,7 +240,7 @@ class ModelTester:
         for k in self.modelList.keys():
             self.modelList[k] = self.ensamble_hyperpar
         
-        CBPC_ensamblebylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        CBPC_ensamblebylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         perf = CBPC_ensamblebylabel.best_param_calculator(self.data_handler.encoded_data,self.data_handler.y_encoded,avg,by_target_label=True,searcher_class=searcher_class)
         
         self.performances['specific_base_dt'] = perf
@@ -256,7 +257,7 @@ class ModelTester:
         for k in self.modelList.keys():
             self.modelList[k] = self.ensamble_hyperpar
         
-        CBPC_ensamble = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        CBPC_ensamble = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         perf = CBPC_ensamble.best_param_calculator(self.data_handler.encoded_data,self.data_handler.y_encoded, avg, by_target_label=True,searcher_class=searcher_class)
         for model,p in perf.items():
             self.performances['overall_base_dt'][f'{model}'] = p
@@ -275,7 +276,7 @@ class ModelTester:
         self.modelList = {ens:None for ens in self.ensambleModelList}
         for k in self.modelList.keys():
             self.modelList[k] = self.ensamble_hyperpar
-        CBPC_ensamble_augmented_data = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        CBPC_ensamble_augmented_data = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         
         for m in self.data_handler.resampled_data_dict:
                 print(f"for augmented data with {m}")
@@ -299,7 +300,7 @@ class ModelTester:
         self.modelList = {ens:None for ens in self.ensambleModelList}
         for k in self.modelList.keys():
             self.modelList[k] = self.ensamble_hyperpar
-        CBPC_ensamble_augmented_data_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)
+        CBPC_ensamble_augmented_data_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         for m in self.data_handler.resampled_data_dict:
                 print(f"for augmented data with {m}")
                 #print(data.drop(self.target,axis=1))
@@ -314,7 +315,7 @@ class ModelTester:
     def best_param_calculator_from_augmented_data(self,cv = 10,avg='macro',searcher_class=GridSearchCV):
         if self.data_handler.encoded_data is None or self.data_handler.y_encoded is None:
             return "No augmented data"
-        CBPC_augmented_data = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)        
+        CBPC_augmented_data = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)        
         for m in self.data_handler.resampled_data_dict:
                 print(f"for augmented data with {m}")
                 X = self.data_handler.resampled_data_dict[m].drop(self.target,axis=1)
@@ -325,7 +326,7 @@ class ModelTester:
     def best_param_calculator_from_augmented_data_by_label(self,cv = 10,avg='macro',searcher_class=GridSearchCV):
         if self.data_handler.encoded_data is None or self.data_handler.y_encoded is None:
             return "No augmented data"
-        CBPC_augmented_data_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class)        
+        CBPC_augmented_data_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)        
 
         for m in self.data_handler.resampled_data_dict:
             X = self.data_handler.resampled_data_dict[m].drop(self.target,axis=1)
