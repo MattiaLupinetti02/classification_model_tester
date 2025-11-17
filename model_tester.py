@@ -422,7 +422,7 @@ class ModelTester:
                     for method,data in self.data_handler.resampled_data_dict.items():
                         self.visualizer.plot_validation_curve(
                             model, self.scale_data(data.drop(self.target,axis=1)), data[self.target],
-                            param_name, param_values, cv, ax=axes[plot_index])
+                            param_name, param_values, cv, ax=axes[plot_index],dt_name=method)
                 
                 plot_index += 1
     
