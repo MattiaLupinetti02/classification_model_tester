@@ -366,7 +366,7 @@ class CustomBestParamCalculator:
                 # SE E' SCIKIT-LEARN (mantieni compatibilità)
             else:
                 cv_strategy = StratifiedKFold(n_splits=self.cv, shuffle=True, random_state=42)
-
+                
                 if searcher_class == RandomizedSearchCV:
                     searcher = searcher_class(
                         estimator=model,
@@ -395,7 +395,7 @@ class CustomBestParamCalculator:
 
                     searcher.fit(self.scale_data(X), y)
                     best_params = searcher.best_params_
-
+                   
                 for scorer_name in self.scorers.keys():
                     best_params = searcher.best_params_
                     best_score = searcher.cv_results_[f'mean_test_{scorer_name}'][searcher.best_index_]
@@ -420,12 +420,11 @@ class CustomBestParamCalculator:
         else:
             scoring_metrics = self.make_metrics(avg=avg)
         for name,scoring in scoring_metrics.items():
-            
             scores = cross_val_score(
                 model, self.scale_data(X), y,
                 cv=cv_strategy,
                 scoring=scoring,
-                n_jobs = -1
+                n_jobs = self.n_jobs
             )
             print(f"\t Score ({name}): ")
             print(f"\t{float(np.mean(scores))}")
