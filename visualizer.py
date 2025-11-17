@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import re
 from sklearn.model_selection import learning_curve, validation_curve
-
+import random
 
 class Visualizer:
     def __init__(self, data: pd.DataFrame, y_data:pd.Series, target: str,numeric_features, categorical_features,boolean_features, model_list,resampled_data: dict | None = None):
@@ -196,7 +196,7 @@ class Visualizer:
         #plt.savefig(f'learning_curve_{model}.png', dpi=300, bbox_inches='tight')  # Salva il grafico come immagine PNG
         plt.show()
     
-    def plot_validation_curve(self, model, X, y, param_name, param_range, cv=5, ax=None):
+    def plot_validation_curve(self, model, X, y, param_name, param_range, cv=5, ax=None,dt_name=None):
         train_scores, test_scores = validation_curve(
             model, X, y, param_name=param_name, param_range=param_range, cv=cv
         )
@@ -206,8 +206,10 @@ class Visualizer:
         test_mean = np.mean(test_scores, axis=1)
         
         # Disegna il grafico sull'asse specificato
-        ax.plot(param_range, train_mean, label='Training score', color='blue')
-        ax.plot(param_range, test_mean, label='Validation score', color='orange')
+        tr_score = f'Training score {dt_name}' if dt_name is not None else 'Training Score'
+        vl_score = f'Validation score {dt_name}' if dt_name is not None else 'Validation Score'
+        ax.plot(param_range, train_mean, label=tr_score, color=f"#{random.randint(0, 0xFFFFFF):06x}")
+        ax.plot(param_range, test_mean, label=vl_score, color=f"#{random.randint(0, 0xFFFFFF):06x}")
         ax.set_ylabel('Score')
         ax.set_xlabel(param_name)
         
