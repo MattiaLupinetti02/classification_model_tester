@@ -7,3 +7,4 @@ from .model_tester import ModelTester
 from .custom_best_param_calulator import OptunaStudy,CustomBestParamCalculator
 from .create_optuna_study import create_optuna_study
 from .data_handler import DataHandler
+from .custom_ensamble_best_param_calculator import modular_ensemble_optimization
