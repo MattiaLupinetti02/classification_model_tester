@@ -146,7 +146,7 @@ class EnsembleOptimizer:
             search_params,
             scoring=scorers,
             cv=10,
-            refit = 'f1-score_YELLOW',
+            refit = 'accuracy',
             n_jobs=-1,
             verbose=0
         )
@@ -157,8 +157,25 @@ class EnsembleOptimizer:
         self.best_score_ = grid_search.best_score_
         self.best_params_ = grid_search.best_params_
         
-        return self.best_ensemble_
+        return self.best_ensemble_, self.mean_results(scorers,grid_search)
 
+    def mean_results(self,scorers,grid_search_obj):
+        metric_means = {}
+        for metric_name in scorers.keys():
+            mean_scores = grid_search_obj.cv_results_[f'mean_test_{metric_name}']
+            std_scores = grid_search_obj.cv_results_[f'std_test_{metric_name}']
+            
+            best_idx = grid_search_obj.best_index_
+            best_mean = mean_scores[best_idx]
+            best_std = std_scores[best_idx]
+            
+            metric_means[metric_name] = pd.DataFrame([{
+                'mean': best_mean,
+                'std': best_std,
+                'all_means': mean_scores,
+                'all_stds': std_scores
+            }])
+        return metric_means
 def modular_ensemble_optimization(
     df, 
     target_models, 
@@ -225,7 +242,7 @@ def modular_ensemble_optimization(
         cv_folds=cv
     )
     
-    best_ensemble = optimizer.optimize_ensemble(
+    best_ensemble,results_mean = optimizer.optimize_ensemble(
         ensemble_type, 
         base_models, 
         X, y, 
@@ -243,5 +260,5 @@ def modular_ensemble_optimization(
     
     print(f"Ottimizzazione completata. Best score: {optimizer.best_score_:.4f}")
     
-    return best_ensemble, optimization_results
+    return best_ensemble, optimization_results, results_mean
 
