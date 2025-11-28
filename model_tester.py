@@ -206,7 +206,7 @@ class ModelTester:
         for k,data in dataset.items():
             print(f"\t Performance on {k} dataset ")
             for m in models:
-                print(f"Calculating cross val score for model: {m}")
+                print("Calculating cross val score for model:" +  f"{m}".split('(')[0])
                 model_to_implement = to_implement[(to_implement['Model'] == re.split(r'\(', f'{m}')[0]) & (to_implement['Experiment'] == f'{exp_type}_{k}_dt')]
                 print("model to implement")
                 print(model_to_implement)
