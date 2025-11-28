@@ -202,12 +202,14 @@ class ModelTester:
             dataset['base'] = self.data_handler.encoded_data
             dataset['base'][self.target] = self.data_handler.y_encoded
 
-
         for k,data in dataset.items():
             print(f"\t Performance on {k} dataset ")
             for m in models:
                 print("Calculating cross val score for model:" +  f"{m}".split('(')[0])
-                model_to_implement = to_implement[(to_implement['Model'] == re.split(r'\(', f'{m}')[0]) & (to_implement['Experiment'] == f'{exp_type}_{k}_dt')]
+                if ensamble_models == True:
+                    model_to_implement = to_implement[(to_implement['Experiment'] == f'{exp_type}_{k}_dt')]    
+                else:
+                    model_to_implement = to_implement[(to_implement['Model'] == re.split(r'\(', f'{m}')[0]) & (to_implement['Experiment'] == f'{exp_type}_{k}_dt')]
                 print("model to implement")
                 print(model_to_implement)
                 if model_to_implement.shape[0] == 0:
