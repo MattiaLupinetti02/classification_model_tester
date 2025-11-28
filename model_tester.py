@@ -182,7 +182,7 @@ class ModelTester:
         to_implement = to_implement[to_implement['Performance'].notnull()]
         return to_implement
 
-    def implement_calculated_models(self,cv=10,avg='binary',ensamble_models = False,specific=False, resampled_data = False, performance_dataset:pd.DataFrame | None = None):
+    def implement_calculated_models(self,cv=10,avg='binary',ensamble_models = False,specific=False,by_label=False, resampled_data = False, performance_dataset:pd.DataFrame | None = None):
        
         to_implement = self.prepare_model_to_test(performance_dataset=performance_dataset)
         CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,n_jobs=self.n_jobs)
@@ -221,7 +221,7 @@ class ModelTester:
                     print(f'\t Model optimized for the metric {metrics[i]}')
                     hp_dict = json.loads(hp.replace("'", "\""))
                     m.set_params(**hp_dict)
-                    CBPC.validation_model_CV(m, data.drop(self.target,axis=1), data[self.target],avg=avg,by_label=specific)
+                    CBPC.validation_model_CV(m, data.drop(self.target,axis=1), data[self.target],avg=avg,by_label=by_label)
                     i= i +1
 
 
