@@ -207,12 +207,15 @@ class ModelTester:
             for m in models:
                 print(f"Calculating cross val score for model: {m}")
                 model_to_implement = to_implement[(to_implement['Model'] == re.split(r'\(', f'{m}')[0]) & (to_implement['Experiment'] == f'{exp_type}_{k}_dt')]
+                print("model to implement")
+                print(model_to_implement)
                 if model_to_implement.shape[0] == 0:
                     print(f'\t The performance dataset has not {exp_type} experiments. You passed specific={specific} try with {not specific}')
                     return
                 hyperparameters = model_to_implement['Hyperparameters']
                 metrics = model_to_implement['Metric/Class']
                 print(hyperparameters)
+                print(metrics)
                 i = 0
                 for hp in hyperparameters:
                     print(f'\t Hyperparameters {hp} \n \toptimized for the metric {metrics[i]}')
