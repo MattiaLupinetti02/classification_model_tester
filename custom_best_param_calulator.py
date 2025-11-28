@@ -427,7 +427,8 @@ class CustomBestParamCalculator:
                 n_jobs = self.n_jobs
             )
             print(f"\t Score ({name}): ")
-            print(f"\t{float(np.mean(scores))}")
+            print(f"\t\t{np.mean(scores):.4f} ± {np.std(scores):.4f}")
+
             
 class OptunaStudy:
     def __init__(self, *args, **kwargs):

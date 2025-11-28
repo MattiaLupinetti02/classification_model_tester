@@ -53,9 +53,9 @@ class ModelTester:
         
         self.data_handler = DataHandler(data,target)
         data.drop(target, axis=1, inplace=True)
-       
-        if self.modelList is not None and ensambleModelList is not None:
-            self.ensambleModelList = ensambleModelList
+        self.ensambleModelList = ensambleModelList
+        if self.modelList is not None and self.ensambleModelList is not None:
+            
             keys = [str(m).split("(")[0] for m in self.modelList.keys()]
             self.estimators = [(k,m) for k,m in zip(keys,list(self.modelList.keys()))]
             self.ensamble_hyperpar = {}
