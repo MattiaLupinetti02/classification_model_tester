@@ -218,7 +218,6 @@ class ModelTester:
                 print(hyperparameters)
                 i = 0
                 for hp in hyperparameters:
-                    metrics.reset_index(drop=True) 
                     print(f'\t Model optimized for the metric {metrics[i]}')
                     hp_dict = json.loads(hp.replace("'", "\""))
                     m.set_params(**hp_dict)
