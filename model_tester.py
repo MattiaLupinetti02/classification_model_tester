@@ -54,7 +54,7 @@ class ModelTester:
         self.data_handler = DataHandler(data,target)
         data.drop(target, axis=1, inplace=True)
         self.ensambleModelList = ensambleModelList
-        if self.modelList is not None and self.ensambleModelList is not None:
+        if self.modelList is not None and self.ensambleModelList is not None and not any([value is None for value in self.modelList.values()]):
             
             keys = [str(m).split("(")[0] for m in self.modelList.keys()]
             self.estimators = [(k,m) for k,m in zip(keys,list(self.modelList.keys()))]
