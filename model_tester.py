@@ -204,6 +204,7 @@ class ModelTester:
 
 
         for k,data in dataset.items():
+            print(f"\t Performance on {k} dataset ")
             for m in models:
                 print(f"Calculating cross val score for model: {m}")
                 model_to_implement = to_implement[(to_implement['Model'] == re.split(r'\(', f'{m}')[0]) & (to_implement['Experiment'] == f'{exp_type}_{k}_dt')]
@@ -213,15 +214,14 @@ class ModelTester:
                     print(f'\t The performance dataset has not {exp_type} experiments. You passed specific={specific} try with {not specific}')
                     return
                 hyperparameters = model_to_implement['Hyperparameters']
-                metrics = model_to_implement['Metric/Class']
+                metrics = model_to_implement['Metric/Class'].tolist()
                 print(hyperparameters)
                 i = 0
                 for hp in hyperparameters:
                     metrics.reset_index(drop=True) 
-                    print(f'\t Hyperparameters {hp} \n \toptimized for the metric {metrics[i]}')
+                    print(f'\t Model optimized for the metric {metrics[i]}')
                     hp_dict = json.loads(hp.replace("'", "\""))
                     m.set_params(**hp_dict)
-                    print(f"\t Performance on {k} dataset ")
                     CBPC.validation_model_CV(m, data.drop(self.target,axis=1), data[self.target],avg=avg,by_label=specific)
                     i= i +1
 
