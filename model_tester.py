@@ -215,9 +215,9 @@ class ModelTester:
                 hyperparameters = model_to_implement['Hyperparameters']
                 metrics = model_to_implement['Metric/Class']
                 print(hyperparameters)
-                print(metrics)
                 i = 0
                 for hp in hyperparameters:
+                    print(metrics)
                     print(f'\t Hyperparameters {hp} \n \toptimized for the metric {metrics[i]}')
                     hp_dict = json.loads(hp.replace("'", "\""))
                     m.set_params(**hp_dict)
