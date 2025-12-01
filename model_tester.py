@@ -15,12 +15,27 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold
 import re
-from sklearn.ensemble import StackingClassifier, StackingRegressor
-from sklearn.ensemble import VotingClassifier, VotingRegressor
+#from sklearn.ensemble import StackingClassifier, StackingRegressor
+#from sklearn.ensemble import VotingClassifier, VotingRegressor
 from sklearn.pipeline import Pipeline
 from .data_handler import DataHandler
 from .custom_best_param_calulator import CustomBestParamCalculator
 from .visualizer import Visualizer
+
+from typing import Dict, List, Optional
+
+from sklearn.ensemble import *
+from sklearn.linear_model import *
+from sklearn.svm import *
+from sklearn.neighbors import *
+from sklearn.tree import *
+from sklearn.naive_bayes import *
+from sklearn.discriminant_analysis import *
+try:
+    from xgboost import *
+except ImportError:
+    pass
+
 
 class ModelTester:
     modelList = None
@@ -55,18 +70,7 @@ class ModelTester:
         data.drop(target, axis=1, inplace=True)
         self.ensambleModelList = ensambleModelList
         if self.modelList is not None and self.ensambleModelList is not None and not any([value is None for value in self.modelList.values()]):
-            
-            keys = [str(m).split("(")[0] for m in self.modelList.keys()]
-            self.estimators = [(k,m) for k,m in zip(keys,list(self.modelList.keys()))]
-            self.ensamble_hyperpar = {}
-            for model, hyperpar_list in zip(keys,self.modelList.values()):
-                    for hyperpar_name,values in hyperpar_list.items():
-                        self.ensamble_hyperpar[str(model)+"__" + str(hyperpar_name)] = values
-            for ensamble in self.ensambleModelList:
-                if isinstance(ensamble, (StackingClassifier, StackingRegressor)) or (isinstance(ensamble,(VotingClassifier, VotingRegressor)) and getattr(ensamble,"voting",None)=="soft"):
-                    ensamble.set_params(estimators=self.get_soft_voting_ready_models(self.estimators))
-                else:
-                    ensamble.set_params(estimators=self.estimators)      
+            self.ensamble_hyperpar, self.ensambleModelList = self.initialize_ensamble_models(self.modelList,self.ensambleModelList)
         self.data_handler.encode_target()
         self.data_handler.encode_features()         
         self.data_handler.concat_encoded_dataset()    
@@ -79,6 +83,21 @@ class ModelTester:
         
     
 
+    def initialize_ensamble_models(self,base_models:Dict, ensambleModelList:List): 
+            keys = [str(m).split("(")[0] for m in base_models.keys()]
+            estimators = [(k,m) for k,m in zip(keys,list(base_models.keys()))]
+            ensamble_hyperpar = {}
+            #make hyperpar
+            for model, hyperpar_list in zip(keys,base_models.values()):
+                    for hyperpar_name,values in hyperpar_list.items():
+                        ensamble_hyperpar[str(model)+"__" + str(hyperpar_name)] = values
+            #set base_models
+            for ensamble in ensambleModelList:
+                if isinstance(ensamble, (StackingClassifier, StackingRegressor)) or (isinstance(ensamble,(VotingClassifier, VotingRegressor)) and getattr(ensamble,"voting",None)=="soft"):
+                    ensamble.set_params(estimators=self.get_soft_voting_ready_models(estimators))
+                else:
+                    ensamble.set_params(estimators=estimators)   
+            return ensamble_hyperpar, ensambleModelList 
     def initialize_performance(self,resampling_methods=None):
         if resampling_methods is not None:
             for res_method in resampling_methods:
@@ -162,7 +181,15 @@ class ModelTester:
         })
         
         return data_to_plot
-    def prepare_model_to_test(self,cv=10,performance_dataset:pd.DataFrame | None = None):
+    def prepare_model_to_test(
+        self,
+        exp_type,  # aggiungi tipo se lo conosci (es: str)
+        dt_type,   # aggiungi tipo se lo conosci (es: str) 
+        metric,
+        model=None,  # aggiungi tipo se lo conosci (es: Optional[object])
+        cv: int = 10,
+        performance_dataset: Optional[pd.DataFrame] = None
+        ) -> None:  # aggiungi return type
         
         if performance_dataset is not None:
             if performance_dataset.columns.tolist() != ['Experiment', 'Model', 'Metric/Class', 'Hyperparameters', 'Performance']:
@@ -180,17 +207,27 @@ class ModelTester:
         else:
             to_implement = self.make_dataframe_performances()
         to_implement = to_implement[to_implement['Performance'].notnull()]
+        pattern = f"^{exp_type}_.*{dt_type}_dt$"
+        if model is None:
+            to_implement = to_implement[(to_implement['Metric/Class'] == metric)&(to_implement['Experiment'].str.contains(pattern))]
+        else:    
+            if not isinstance(model,(List)):
+                model = [model]
+            model = [re.split(r'\(', f'{m}')[0] for m in model]
+            to_implement = to_implement[(to_implement['Metric/Class'] == metric)&(to_implement['Model'].isin(model)) & (to_implement['Experiment'].str.contains(pattern))]
         return to_implement
-
-    def implement_calculated_models(self,cv=10,avg='binary',ensamble_models = False,specific=False,by_label=False, resampled_data = False, performance_dataset:pd.DataFrame | None = None):
-       
-        to_implement = self.prepare_model_to_test(performance_dataset=performance_dataset)
-        CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,n_jobs=self.n_jobs)
-        if ensamble_models == True and self.ensambleModelList is not None:
-            models = self.ensambleModelList
-        else:
-            models = self.modelList.keys()
-
+    def implement_models(
+        self,
+        cv: int = 10,
+        avg: Optional[str] = 'binary',
+        metric: Optional[str] = 'accuracy',
+        ensamble_by_base_models: bool = False,
+        specific: bool = False,
+        by_label: bool = False,
+        resampled_data: bool = False,
+        base_models: Optional[List] = None,
+        performance_dataset: Optional[pd.DataFrame] = None
+    ) -> None:
         if specific == True:
                 exp_type = 'specific'
         else:
@@ -201,33 +238,68 @@ class ModelTester:
         else:
             dataset['base'] = self.data_handler.encoded_data
             dataset['base'][self.target] = self.data_handler.y_encoded
-
+        
         for k,data in dataset.items():
             print(f"\t Performance on {k} dataset ")
-            for m in models:
-                print("Calculating cross val score for model:" +  f"{m}".split('(')[0])
-                if ensamble_models == True:
-                    model_to_implement = to_implement[(to_implement['Experiment'] == f'{exp_type}_{k}_dt')]    
+            model_to_implement = self.prepare_model_to_test(exp_type,k,metric,model=base_models,performance_dataset=performance_dataset)
+            if model_to_implement.shape[0] == 0:
+                print(f'\t\t\t The performance dataset has not {exp_type} experiments. You passed specific={specific} try with {not specific}')
+                return
+            self.implement_calculated_models(data,model_to_implement,by_label=by_label,ensamble_by_base_models=ensamble_by_base_models,avg=avg,cv=cv)
+
+    def implement_calculated_models(
+        self,
+        dataset,
+        model_to_implement: pd.DataFrame,
+        avg: Optional[str] = 'binary',
+        by_label: bool = False,
+        ensamble_by_base_models: bool = False,
+        cv:int=10        
+    ) -> None:
+           
+        models = [globals()[model_name]() for model_name in model_to_implement['Model']]
+        CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,n_jobs=self.n_jobs)
+        if ensamble_by_base_models == True:
+            base_models = []
+        hyperparameters = model_to_implement['Hyperparameters']
+        #metrics = model_to_implement['Metric/Class'].tolist()
+        print(model_to_implement)
+        for m in models:
+            if ensamble_by_base_models:
+                print(f"Adding model {type(m).__name__}".split('(')[0]+" to the ensamble base models list")
+            else:
+                model_name = f"{models}".split('(')[0] if models is not None else model_to_implement['Model']
+                print(f"\tCalculating cross val score for model: {model_name}")
+            hyperparameters = model_to_implement.loc[model_to_implement['Model']==f'{m}'.split('(')[0],'Hyperparameters']
+            metrics = model_to_implement.loc[model_to_implement['Model']==f'{m}'.split('(')[0],'Metric/Class'].tolist()
+            print(f"hyperparameters of model {type(m).__name__}".split('(')[0]+f" \n {hyperparameters}")
+            i = 0                    
+            for hp in hyperparameters:
+                print(f'\t\t\t\t Optimized for the metric {metrics[i]}')
+                hp_dict = json.loads(hp.replace("'", "\""))
+                m.set_params(**hp_dict)
+                if ensamble_by_base_models == True:
+                    base_models.append((f'{m}'.split('(')[0],m))
                 else:
-                    model_to_implement = to_implement[(to_implement['Model'] == re.split(r'\(', f'{m}')[0]) & (to_implement['Experiment'] == f'{exp_type}_{k}_dt')]
-                print("model to implement")
-                print(model_to_implement)
-                if model_to_implement.shape[0] == 0:
-                    print(f'\t The performance dataset has not {exp_type} experiments. You passed specific={specific} try with {not specific}')
-                    return
-                hyperparameters = model_to_implement['Hyperparameters']
-                metrics = model_to_implement['Metric/Class'].tolist()
-                print(hyperparameters)
-                i = 0
-                for hp in hyperparameters:
-                    print(f'\t Model optimized for the metric {metrics[i]}')
-                    hp_dict = json.loads(hp.replace("'", "\""))
-                    m.set_params(**hp_dict)
-                    CBPC.validation_model_CV(m, data.drop(self.target,axis=1), data[self.target],avg=avg,by_label=by_label)
-                    i= i +1
+                    CBPC.validation_model_CV(m, dataset.drop(self.target,axis=1), dataset[self.target],avg=avg,by_label=by_label,cv=cv)
+                i= i +1
+        if ensamble_by_base_models == True:
+            self.implement_ensemble_by_base_models(base_models,dataset,CBPC,by_label=by_label,avg=avg,cv=cv)
+            base_models = []
 
-
-
+    def implement_ensemble_by_base_models(
+        self,
+        base_models: List,
+        dataset,
+        model_validator: CustomBestParamCalculator,
+        by_label: bool = False,
+        avg: Optional[str] = 'binary',
+        cv:int=10
+    ) -> None:
+        for ens_m in self.ensambleModelList:
+            ens_m.set_params(estimators=base_models)
+            model_validator.validation_model_CV(ens_m, dataset.drop(self.target,axis=1), dataset[self.target],avg=avg,by_label=by_label,cv=cv)
+        
     def best_param_calculator(self,cv = 10, avg='macro',searcher_class=GridSearchCV):
         CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         perf = CBPC.best_param_calculator(self.data_handler.encoded_data, self.data_handler.y_encoded,avg,searcher_class=searcher_class)
