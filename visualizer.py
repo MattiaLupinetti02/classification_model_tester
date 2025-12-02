@@ -77,7 +77,7 @@ class Visualizer:
 
     def plot_correlation_matrix(self, data:pd.DataFrame,save=False):
         """ Disegna una heatmap delle correlazioni tra variabili numeriche """
-        plt.figure(figsize=(8,6))
+        plt.figure(figsize=(6,4))
         corr_matrix = self.get_numeric_columns(data)
         sns.heatmap(corr_matrix, annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5)
         plt.title("Matrice di correlazione tra variabili numeriche")
