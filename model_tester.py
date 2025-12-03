@@ -298,6 +298,7 @@ class ModelTester:
     ) -> None:
         for ens_m in self.ensambleModelList:
             ens_m.set_params(estimators=base_models)
+            print(f"Ensamble model {ens_m}".split('('))
             model_validator.validation_model_CV(ens_m, dataset.drop(self.target,axis=1), dataset[self.target],avg=avg,by_label=by_label,cv=cv)
         
     def best_param_calculator(self,cv = 10, avg='macro',searcher_class=GridSearchCV):
