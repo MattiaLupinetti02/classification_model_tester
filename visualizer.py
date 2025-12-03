@@ -87,7 +87,31 @@ class Visualizer:
             self._save_plot(filename)
         plt.show()
 
+    def plot_correlation_matrix_2(self, data:pd.DataFrame, save=False):
+        """ Disegna una heatmap delle correlazioni tra variabili numeriche """
+        corr_matrix = self.get_numeric_columns(data)
+        num_vars = corr_matrix.shape[0]
+        
+        # Calcola dimensione figura in base al numero di variabili
+        fig_size = max(8, num_vars * 0.8)
+        plt.figure(figsize=(fig_size, fig_size * 0.8))
+        
+        # Adatta dimensione annotazione
+        annot = True if num_vars <= 15 else False
+        annot_size = max(6, 12 - num_vars * 0.3)
+        
+        sns.heatmap(corr_matrix, annot=annot, cmap="coolwarm", fmt=".2f",
+                    linewidths=0.5, square=True,
+                    annot_kws={"size": annot_size} if annot else None,
+                    cbar_kws={"shrink": 0.7})
+        
+        plt.title(f"Matrice di correlazione ({num_vars} variabili)", fontsize=14)
+        plt.tight_layout()
 
+    if save:
+        filename = f"correlation_matrix_original_data.png"
+        self._save_plot(filename)
+    plt.show()
 
     def plot_binary_distribution(self,data:pd.DataFrame,title="binary columns distribution",figsize=(12,8), save=False):
         """ Disegna conteggi per le variabili binarie """
