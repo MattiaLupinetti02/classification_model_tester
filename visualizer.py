@@ -108,10 +108,10 @@ class Visualizer:
         plt.title(f"Matrice di correlazione ({num_vars} variabili)", fontsize=14)
         plt.tight_layout()
 
-    if save:
-        filename = f"correlation_matrix_original_data.png"
-        self._save_plot(filename)
-    plt.show()
+        if save:
+            filename = f"correlation_matrix_original_data.png"
+            self._save_plot(filename)
+        plt.show()
 
     def plot_binary_distribution(self,data:pd.DataFrame,title="binary columns distribution",figsize=(12,8), save=False):
         """ Disegna conteggi per le variabili binarie """
