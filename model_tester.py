@@ -452,9 +452,9 @@ class ModelTester:
         if resampled and self.data_handler.resampled_data_dict:
             for method, data in self.data_handler.resampled_data_dict.items():
                 print(f"Plotting correlation matrix for resampled data with method: {method}")
-                self.visualizer.plot_correlation_matrix(self.data_handler.original_data, save=save)
+                self.visualizer.plot_correlation_matrix_2(self.data_handler.original_data, save=save)
         else:
-            self.visualizer.plot_correlation_matrix(self.data_handler.original_data, save=save)
+            self.visualizer.plot_correlation_matrix_2(self.data_handler.original_data, save=save)
     
     def plot_binary_distribution(self, resampled= False, save=False):
         if resampled and self.data_handler.resampled_data_dict:
