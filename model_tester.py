@@ -43,9 +43,9 @@ class ModelTester:
     target = None
     #pipelines = []
     performances = dict()
-    ensambleModelList = None
+    ensembleModelList = None
     boolean_columns = None 
-    def __init__(self, modelList:Dict, metrics:Dict, data:pd.DataFrame, target,ensambleModelList:List = None, resamplingMethods = None,n_jobs = 1):
+    def __init__(self, modelList:Dict, metrics:Dict, data:pd.DataFrame, target,ensembleModelList:List = None, resamplingMethods = None,n_jobs = 1):
         if modelList is None:
             print("model list is empty")
         if data is None:
@@ -68,9 +68,9 @@ class ModelTester:
         
         self.data_handler = DataHandler(data,target)
         data.drop(target, axis=1, inplace=True)
-        self.ensambleModelList = ensambleModelList
-        if self.modelList is not None and self.ensambleModelList is not None and not any([value is None for value in self.modelList.values()]):
-            self.ensamble_hyperpar, self.ensambleModelList = self.initialize_ensamble_models(self.modelList,self.ensambleModelList)
+        self.ensembleModelList = ensembleModelList
+        if self.modelList is not None and self.ensembleModelList is not None and not any([value is None for value in self.modelList.values()]):
+            self.ensemble_hyperpar, self.ensembleModelList = self.initialize_ensemble_models(self.modelList,self.ensembleModelList)
         self.data_handler.encode_target()
         self.data_handler.encode_features()         
         self.data_handler.concat_encoded_dataset()    
@@ -83,21 +83,21 @@ class ModelTester:
         
     
 
-    def initialize_ensamble_models(self,base_models:Dict, ensambleModelList:List): 
+    def initialize_ensemble_models(self,base_models:Dict, ensembleModelList:List): 
             keys = [str(m).split("(")[0] for m in base_models.keys()]
             estimators = [(k,m) for k,m in zip(keys,list(base_models.keys()))]
-            ensamble_hyperpar = {}
+            ensemble_hyperpar = {}
             #make hyperpar
             for model, hyperpar_list in zip(keys,base_models.values()):
                     for hyperpar_name,values in hyperpar_list.items():
-                        ensamble_hyperpar[str(model)+"__" + str(hyperpar_name)] = values
+                        ensemble_hyperpar[str(model)+"__" + str(hyperpar_name)] = values
             #set base_models
-            for ensamble in ensambleModelList:
-                if isinstance(ensamble, (StackingClassifier, StackingRegressor)) or (isinstance(ensamble,(VotingClassifier, VotingRegressor)) and getattr(ensamble,"voting",None)=="soft"):
-                    ensamble.set_params(estimators=self.get_soft_voting_ready_models(estimators))
+            for ensemble in ensembleModelList:
+                if isinstance(ensemble, (StackingClassifier, StackingRegressor)) or (isinstance(ensemble,(VotingClassifier, VotingRegressor)) and getattr(ensemble,"voting",None)=="soft"):
+                    ensemble.set_params(estimators=self.get_soft_voting_ready_models(estimators))
                 else:
-                    ensamble.set_params(estimators=estimators)   
-            return ensamble_hyperpar, ensambleModelList 
+                    ensemble.set_params(estimators=estimators)   
+            return ensemble_hyperpar, ensembleModelList 
     def initialize_performance(self,resampling_methods=None):
         if resampling_methods is not None:
             for res_method in resampling_methods:
@@ -221,7 +221,7 @@ class ModelTester:
         cv: int = 10,
         avg: Optional[str] = 'binary',
         metric: Optional[str] = 'accuracy',
-        ensamble_by_base_models: bool = False,
+        ensemble_by_base_models: bool = False,
         specific: bool = False,
         by_label: bool = False,
         resampled_data: bool = False,
@@ -245,7 +245,7 @@ class ModelTester:
             if model_to_implement.shape[0] == 0:
                 print(f'\t\t\t The performance dataset has not {exp_type} experiments. You passed specific={specific} try with {not specific}')
                 return
-            self.implement_calculated_models(data,model_to_implement,by_label=by_label,ensamble_by_base_models=ensamble_by_base_models,avg=avg,cv=cv)
+            self.implement_calculated_models(data,model_to_implement,by_label=by_label,ensemble_by_base_models=ensemble_by_base_models,avg=avg,cv=cv)
 
     def implement_calculated_models(
         self,
@@ -253,20 +253,20 @@ class ModelTester:
         model_to_implement: pd.DataFrame,
         avg: Optional[str] = 'binary',
         by_label: bool = False,
-        ensamble_by_base_models: bool = False,
+        ensemble_by_base_models: bool = False,
         cv:int=10        
     ) -> None:
            
         models = [globals()[model_name]() for model_name in model_to_implement['Model']]
         CBPC = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,n_jobs=self.n_jobs)
-        if ensamble_by_base_models == True:
+        if ensemble_by_base_models == True:
             base_models = []
         hyperparameters = model_to_implement['Hyperparameters']
         #metrics = model_to_implement['Metric/Class'].tolist()
         print(model_to_implement)
         for m in models:
-            if ensamble_by_base_models:
-                print(f"Adding model {type(m).__name__}".split('(')[0]+" to the ensamble base models list")
+            if ensemble_by_base_models:
+                print(f"Adding model {type(m).__name__}".split('(')[0]+" to the ensemble base models list")
             else:
                 model_name = f"{models}".split('(')[0] if models is not None else model_to_implement['Model']
                 print(f"\tCalculating cross val score for model: {model_name}")
@@ -278,12 +278,12 @@ class ModelTester:
                 print(f'\t\t\t\t Optimized for the metric {metrics[i]}')
                 hp_dict = json.loads(hp.replace("'", "\""))
                 m.set_params(**hp_dict)
-                if ensamble_by_base_models == True:
+                if ensemble_by_base_models == True:
                     base_models.append((f'{m}'.split('(')[0],m))
                 else:
                     CBPC.validation_model_CV(m, dataset.drop(self.target,axis=1), dataset[self.target],avg=avg,by_label=by_label,cv=cv)
                 i= i +1
-        if ensamble_by_base_models == True:
+        if ensemble_by_base_models == True:
             self.implement_ensemble_by_base_models(base_models,dataset,CBPC,by_label=by_label,avg=avg,cv=cv)
             base_models = []
 
@@ -296,9 +296,9 @@ class ModelTester:
         avg: Optional[str] = 'binary',
         cv:int=10
     ) -> None:
-        for ens_m in self.ensambleModelList:
+        for ens_m in self.ensembleModelList:
             ens_m.set_params(estimators=base_models)
-            print(f"Ensamble model {ens_m}".split('('))
+            print(f"ensemble model {ens_m}".split('('))
             model_validator.validation_model_CV(ens_m, dataset.drop(self.target,axis=1), dataset[self.target],avg=avg,by_label=by_label,cv=cv)
         
     def best_param_calculator(self,cv = 10, avg='macro',searcher_class=GridSearchCV):
@@ -318,84 +318,84 @@ class ModelTester:
         
         #self.best_param_calculator(cv,avg,True,searcher_class=searcher_class)
 
-    def best_param_calculator_ensamble_by_label(self,cv=10, avg='macro', searcher_class=GridSearchCV):
-        if self.ensambleModelList is None:
-            print("No Ensamble Models")
+    def best_param_calculator_ensemble_by_label(self,cv=10, avg='macro', searcher_class=GridSearchCV):
+        if self.ensembleModelList is None:
+            print("No ensemble Models")
             return
         copy_models = self.modelList.copy()
-        self.modelList = {ens:None for ens in self.ensambleModelList}
+        self.modelList = {ens:None for ens in self.ensembleModelList}
         
         for k in self.modelList.keys():
-            self.modelList[k] = self.ensamble_hyperpar
+            self.modelList[k] = self.ensemble_hyperpar
         
-        CBPC_ensamblebylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
-        perf = CBPC_ensamblebylabel.best_param_calculator(self.data_handler.encoded_data,self.data_handler.y_encoded,avg,by_target_label=True,searcher_class=searcher_class)
+        CBPC_ensemblebylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
+        perf = CBPC_ensemblebylabel.best_param_calculator(self.data_handler.encoded_data,self.data_handler.y_encoded,avg,by_target_label=True,searcher_class=searcher_class)
         
         self.performances['specific_base_dt'] = perf
        
         self.modelList = copy_models
 
-    def best_param_calculator_ensamble(self,avg='macro',cv=10,searcher_class=GridSearchCV):
-        if self.ensambleModelList is None:
-            print("No Ensamble Models")
+    def best_param_calculator_ensemble(self,avg='macro',cv=10,searcher_class=GridSearchCV):
+        if self.ensembleModelList is None:
+            print("No ensemble Models")
             return 
         copy_models = self.modelList.copy()
-        self.modelList = {ens:None for ens in self.ensambleModelList}
+        self.modelList = {ens:None for ens in self.ensembleModelList}
 
         for k in self.modelList.keys():
-            self.modelList[k] = self.ensamble_hyperpar
+            self.modelList[k] = self.ensemble_hyperpar
         
-        CBPC_ensamble = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
-        perf = CBPC_ensamble.best_param_calculator(self.data_handler.encoded_data,self.data_handler.y_encoded, avg, by_target_label=True,searcher_class=searcher_class)
+        CBPC_ensemble = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
+        perf = CBPC_ensemble.best_param_calculator(self.data_handler.encoded_data,self.data_handler.y_encoded, avg, by_target_label=True,searcher_class=searcher_class)
         for model,p in perf.items():
             self.performances['overall_base_dt'][f'{model}'] = p
         
         #self.best_param_calculator(cv,'macro',searcher_class=searcher_class)
         self.modelList = copy_models
 
-    def best_param_calculator_ensamble_from_augmented_data(self,avg='macro',cv=10,searcher_class=GridSearchCV):
+    def best_param_calculator_ensemble_from_augmented_data(self,avg='macro',cv=10,searcher_class=GridSearchCV):
         if self.data_handler.encoded_data is None or self.data_handler.y_encoded is None:
             print("No augmented data")
             return 
-        if self.ensambleModelList is None:
-            print("No Ensamble Models")
+        if self.ensembleModelList is None:
+            print("No ensemble Models")
             return 
         copy_models = self.modelList.copy()
-        self.modelList = {ens:None for ens in self.ensambleModelList}
+        self.modelList = {ens:None for ens in self.ensembleModelList}
         for k in self.modelList.keys():
-            self.modelList[k] = self.ensamble_hyperpar
-        CBPC_ensamble_augmented_data = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
+            self.modelList[k] = self.ensemble_hyperpar
+        CBPC_ensemble_augmented_data = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         
         for m in self.data_handler.resampled_data_dict:
                 print(f"for augmented data with {m}")
                 X = self.data_handler.resampled_data_dict[m].drop(self.target,axis=1)
                 y = self.data_handler.resampled_data_dict[m][self.target]
-                perf = CBPC_ensamble_augmented_data.best_param_calculator(X,y,avg,searcher_class=searcher_class)
+                perf = CBPC_ensemble_augmented_data.best_param_calculator(X,y,avg,searcher_class=searcher_class)
                 for model,p in perf.items():
                     self.performances[f'overall_{m}_dt'][f'{model}'] = p
                 #self.best_param_calculator(cv,"macro",resampled_data_x=data_x,searcher_class=searcher_class, resampled_data_y=data_y,resampler=m)
         self.modelList = copy_models
 
 
-    def best_param_calculator_ensamble_from_augmented_data_by_label(self,cv=10,avg='macro', searcher_class=GridSearchCV):
+    def best_param_calculator_ensemble_from_augmented_data_by_label(self,cv=10,avg='macro', searcher_class=GridSearchCV):
         if self.data_handler.encoded_data is None or self.data_handler.y_encoded is None:
             print("No augmented data")
             return 
-        if self.ensambleModelList is None:
-            print("No Ensamble Models")
+        if self.ensembleModelList is None:
+            print("No ensemble Models")
             return 
         copy_models = self.modelList.copy()
-        self.modelList = {ens:None for ens in self.ensambleModelList}
+        self.modelList = {ens:None for ens in self.ensembleModelList}
         for k in self.modelList.keys():
-            self.modelList[k] = self.ensamble_hyperpar
-        CBPC_ensamble_augmented_data_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
+            self.modelList[k] = self.ensemble_hyperpar
+        CBPC_ensemble_augmented_data_bylabel = CustomBestParamCalculator(self.modelList,self.metrics,self.data_handler.get_label_mapping(),cv=cv,searcher_class=searcher_class,n_jobs=self.n_jobs)
         for m in self.data_handler.resampled_data_dict:
                 print(f"for augmented data with {m}")
                 #print(data.drop(self.target,axis=1))
                 #print(data[self.target])
                 X = self.data_handler.resampled_data_dict[m].drop(self.target,axis=1)
                 y = self.data_handler.resampled_data_dict[m][self.target]
-                perf = CBPC_ensamble_augmented_data_bylabel.best_param_calculator(X,y,avg,by_target_label=True,searcher_class=searcher_class)
+                perf = CBPC_ensemble_augmented_data_bylabel.best_param_calculator(X,y,avg,by_target_label=True,searcher_class=searcher_class)
                 for model,p in perf.items():
                     self.performances[f'specific_{m}_dt'][f'{model}'] = p
         self.modelList = copy_models
