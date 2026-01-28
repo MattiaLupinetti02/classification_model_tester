@@ -2,8 +2,6 @@
 
 The Classification Model Tester is a comprehensive Python library for end-to-end machine learning model testing, optimization, and visualization. It follows a modular architecture with six core classes that work together to provide a complete pipeline from data preprocessing to model deployment.
 
-## Class-by-Class Detailed Documentation
-
 ### 1. **ModelTester** - The Main Orchestrator
 **Location:** `model_tester.py`
 **Purpose:** Central coordinator that manages the entire testing pipeline
