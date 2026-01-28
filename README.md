@@ -209,6 +209,7 @@ flowchart TB
 
     MT --> Results[Performance Results<br/>Optimized Models<br/>Visual Reports]
 ```
+### Data Flow Pipeline
 ```mermaid
 flowchart TD
     %% Input Layer
@@ -248,4 +249,55 @@ flowchart TD
     P3 --> P3_Details
     P4 --> P4_Details
     P5 --> P5_Details
+```
+### Class Dependency Diagram
+```mermaid
+graph TB
+    subgraph "Classification Model Tester - Core Architecture"
+        %% Main Classes
+        MT[ModelTester<br/>Main Orchestrator]
+        DH[DataHandler<br/>Data Preprocessing]
+        CBC[CustomBestParamCalculator<br/>Hyperparameter Optimization]
+        VZ[Visualizer<br/>Visualization & Analysis]
+        CEC[CustomEnsambleBestParamCalculator<br/>Ensemble Optimization]
+        COS[CreateOptunaStudy<br/>Optuna Configuration]
+        
+        %% External Dependencies
+        subgraph "External Libraries"
+            SKL[scikit-learn]
+            PD[pandas]
+            NP[numpy]
+            OPT[optuna]
+            XGB[xgboost]
+            IMB[imbalanced-learn]
+            MAT[matplotlib]
+            SNS[seaborn]
+        end
+        
+        %% Core Relationships
+        MT --> DH
+        MT --> CBC
+        MT --> VZ
+        MT --> CEC
+        
+        %% Module Dependencies
+        DH --> SKL
+        DH --> PD
+        DH --> NP
+        DH --> IMB
+        
+        CBC --> SKL
+        CBC --> OPT
+        CBC --> COS
+        
+        VZ --> MAT
+        VZ --> SNS
+        VZ --> PD
+        
+        CEC --> SKL
+        CEC --> XGB
+        CEC --> PD
+        
+        COS --> OPT
+    end
 ```
