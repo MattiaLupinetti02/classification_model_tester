@@ -208,5 +208,3 @@ flowchart TB
     COS --> OPT
 
     MT --> Results[Performance Results<br/>Optimized Models<br/>Visual Reports]
-
-end
