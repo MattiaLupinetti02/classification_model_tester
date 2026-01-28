@@ -212,3 +212,91 @@ flowchart TB
     
     %% Output
     MT --> Results[Performance Results<br/>Optimized Models<br/>Visual Reports]
+
+flowchart TD
+    %% Input Layer
+    Input[Raw Data + Model Specs + Metrics]
+    
+    %% Processing Pipeline
+    subgraph "Processing Pipeline"
+        P1[Phase 1: Data Preprocessing]
+        P2[Phase 2: Hyperparameter Optimization]
+        P3[Phase 3: Model Implementation]
+        P4[Phase 4: Ensemble Optimization]
+        P5[Phase 5: Visualization]
+    end
+    
+    %% Output Layer
+    Output[Performance Metrics<br/>Optimized Models<br/>Visual Reports<br/>Ensemble Models]
+    
+    %% Detailed Flow
+    Input --> P1
+    P1 --> P2
+    P2 --> P3
+    P3 --> P4
+    P4 --> P5
+    P5 --> Output
+    
+    %% Phase Details
+    subgraph " "
+        P1_Details[One-Hot Encoding<br/>Label Encoding<br/>Resampling<br/>Train/Test Split]
+        P2_Details[GridSearch/Optuna<br/>Cross-Validation<br/>Parameter Tuning]
+        P3_Details[Model Configuration<br/>Performance Validation<br/>Results Storage]
+        P4_Details[Voting/Stacking<br/>Ensemble Weights<br/>Combination Optimization]
+        P5_Details[Learning Curves<br/>Validation Curves<br/>Statistical Plots<br/>Correlation Analysis]
+    end
+    
+    P1 --> P1_Details
+    P2 --> P2_Details
+    P3 --> P3_Details
+    P4 --> P4_Details
+    P5 --> P5_Details
+
+graph TB
+    subgraph "Classification Model Tester - Core Architecture"
+        %% Main Classes
+        MT[ModelTester<br/>Main Orchestrator]
+        DH[DataHandler<br/>Data Preprocessing]
+        CBC[CustomBestParamCalculator<br/>Hyperparameter Optimization]
+        VZ[Visualizer<br/>Visualization & Analysis]
+        CEC[CustomEnsambleBestParamCalculator<br/>Ensemble Optimization]
+        COS[CreateOptunaStudy<br/>Optuna Configuration]
+        
+        %% External Dependencies
+        subgraph "External Libraries"
+            SKL[scikit-learn]
+            PD[pandas]
+            NP[numpy]
+            OPT[optuna]
+            XGB[xgboost]
+            IMB[imbalanced-learn]
+            MAT[matplotlib]
+            SNS[seaborn]
+        end
+        
+        %% Core Relationships
+        MT --> DH
+        MT --> CBC
+        MT --> VZ
+        MT --> CEC
+        
+        %% Module Dependencies
+        DH --> SKL
+        DH --> PD
+        DH --> NP
+        DH --> IMB
+        
+        CBC --> SKL
+        CBC --> OPT
+        CBC --> COS
+        
+        VZ --> MAT
+        VZ --> SNS
+        VZ --> PD
+        
+        CEC --> SKL
+        CEC --> XGB
+        CEC --> PD
+        
+        COS --> OPT
+    end
