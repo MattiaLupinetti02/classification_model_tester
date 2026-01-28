@@ -2,7 +2,7 @@
 
 The Classification Model Tester is a comprehensive Python library for end-to-end machine learning model testing, optimization, and visualization. It follows a modular architecture with six core classes that work together to provide a complete pipeline from data preprocessing to model deployment.
 
-## 📊 Class-by-Class Detailed Documentation
+## Class-by-Class Detailed Documentation
 
 ### 1. **ModelTester** - The Main Orchestrator
 **Location:** `model_tester.py`
@@ -67,18 +67,14 @@ The Classification Model Tester is a comprehensive Python library for end-to-end
 **Purpose:** Advanced hyperparameter optimization with multiple strategies
 
 **Core Responsibilities:**
-- GridSearchCV, RandomizedSearchCV, and HalvingGridSearchCV integration
+- GridSearchCV and RandomizedSearchCV integration
 - Optuna optimization with TPE sampler
-- Memory-efficient grid search implementation
 - Cross-validation strategy management
 - Metric scorer factory creation
-- Timeout and deadlock protection
 - Best parameter extraction and storage
 
 **Key Features:**
-- Support for multiple optimization backends
 - Optuna integration with intelligent pruning
-- Memory-efficient grid search for large parameter spaces
 - Custom objective functions with timeout protection
 - Multi-metric optimization (accuracy, precision, recall, F1)
 - Per-class metric optimization capability
