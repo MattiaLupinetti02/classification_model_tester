@@ -160,7 +160,7 @@ The Classification Model Tester is a comprehensive Python library for end-to-end
 - Configurable direction (maximize/minimize)
 - Integration with main optimization pipeline
 
-## 📊 Architecture Diagrams
+## Architecture Diagrams
 
 ### High-Level Architecture
 ```mermaid
